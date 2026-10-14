@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Salud de Mamá</title>
+<meta name="theme-color" content="#2f6f6a">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mamá">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<script src="config.js"></script>
+<style>
+:root{
+  --bg:#f3f6f5; --card:#ffffff; --ink:#1d2b33; --muted:#5b6b72; --line:#d9e2e0;
+  --accent:#2f6f6a; --accent-soft:#dcebe8; --warm:#b5652b; --warm-soft:#f6e6d8; --danger:#b23a3a;
+  --inmuno:#2f6f6a; --quimio:#4a5fa8; --cita:#9a4f7a; --examen:#a06a12; --nota:#6b7280;
+  --display:"Bitter", Georgia, serif;
+  --body:"Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#121a1d; --card:#1b2529; --ink:#e6eeec; --muted:#9fb0b4; --line:#2c3a3e;
+  --accent:#6fbdb4; --accent-soft:#1f3634; --warm:#e09a63; --warm-soft:#3a2a1e; --danger:#e57b7b;
+  --inmuno:#6fbdb4; --quimio:#93a6ec; --cita:#d996bd; --examen:#e0b45e; --nota:#a3abb5; color-scheme:dark}}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.5;-webkit-text-size-adjust:100%}
+.wrap{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 130px;display:flex;flex-direction:column;gap:22px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+h1{font-size:2rem;line-height:1.15}
+h2{font-size:1.2rem}
+h3{font-size:1.1rem}
+p{margin:0}
+.sub{color:var(--muted);margin-top:4px}
+.muted{color:var(--muted)}
+.small{font-size:.92rem}
+.next{background:var(--accent);color:var(--bg);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:4px}
+.next .lbl{text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;font-weight:700;opacity:.85}
+.next .what{font-family:var(--display);font-size:1.35rem}
+.stats{display:flex;gap:12px;flex-wrap:wrap}
+.stat{flex:1 1 140px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.stat b{display:block;font-family:var(--display);font-size:1.3rem;font-variant-numeric:tabular-nums}
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font:inherit;font-size:.95rem;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:8px 14px;min-height:44px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.list{display:flex;flex-direction:column;gap:14px}
+.entry{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--t);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.entry .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.tag{color:var(--t);font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:.06em}
+.date{color:var(--muted);font-size:.92rem}
+.step{background:var(--accent-soft);border-radius:8px;padding:8px 10px;font-size:.95rem}
+.pay{background:var(--warm-soft);border-radius:8px;padding:8px 10px;font-size:.95rem;display:flex;flex-direction:column;gap:2px}
+.pay .row1{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.num{font-variant-numeric:tabular-nums;font-weight:700}
+.files{display:flex;gap:8px;flex-wrap:wrap}
+.file{font:inherit;font-size:.92rem;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:8px 12px;min-height:44px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:.9rem}
+.links{display:flex;gap:16px}
+.link{font:inherit;font-weight:700;color:var(--accent);background:none;border:0;padding:8px 0;min-height:44px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.add{position:fixed;left:0;right:0;bottom:0;padding:12px max(16px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:linear-gradient(transparent,var(--bg) 35%);display:flex;justify-content:center;z-index:5}
+.btn{font:inherit;font-weight:700;font-size:1.05rem;border:0;border-radius:14px;background:var(--warm);color:#fff;padding:16px 22px;width:100%;max-width:640px;min-height:56px;cursor:pointer}
+.btn:disabled{opacity:.6}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--warm);outline-offset:2px}
+.sheet{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px}
+label{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:.95rem}
+input,select,textarea{font:inherit;font-weight:400;font-size:1rem;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);min-height:48px;width:100%}
+textarea{min-height:100px;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 140px;min-width:0}
+fieldset{border:1px solid var(--line);border-radius:12px;padding:12px;margin:0;display:flex;flex-direction:column;gap:10px;min-width:0}
+legend{font-weight:700;padding:0 6px}
+.payrow{border-bottom:1px dashed var(--line);padding-bottom:12px;display:flex;flex-direction:column;gap:8px}
+.payrow:last-of-type{border-bottom:0}
+.empty{color:var(--muted);text-align:center;padding:20px;background:var(--card);border:1px dashed var(--line);border-radius:12px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.box{background:var(--card);color:var(--ink);border-radius:16px;padding:18px;max-width:560px;width:100%;max-height:90vh;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.box img{max-width:100%;border-radius:8px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;z-index:30;max-width:90vw}
+.center{min-height:70vh;display:flex;flex-direction:column;justify-content:center;gap:16px}
+</style>
+</head>
+<body>
+
+<!-- Pantalla para poner la clave -->
+<div class="wrap center" id="v-llave" hidden>
+  <h1>Salud de Mamá</h1>
+  <p>Para entrar, pega la clave que te mandó Domenica.</p>
+  <label for="i-llave">Clave<input id="i-llave" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+  <p class="small" id="llave-error" hidden style="color:var(--danger)">Esa clave no funciona. Revisa que esté completa.</p>
+  <button class="btn" id="b-llave">Entrar</button>
+</div>
+
+<!-- Pantalla principal -->
+<div class="wrap" id="v-inicio" hidden>
+  <header>
+    <h1>Salud de Mamá</h1>
+    <p class="sub">Lo que se ha hecho, en un solo lugar, para toda la familia.</p>
+  </header>
+  <section class="next" id="proxima" hidden aria-label="Lo que viene"></section>
+  <div class="stats" id="stats"></div>
+  <div class="filters" role="group" aria-label="Filtrar" id="filtros"></div>
+  <section class="list" aria-labelledby="h-prox" id="s-prox">
+    <h2 id="h-prox">Lo que viene</h2>
+    <div class="list" id="l-prox"></div>
+  </section>
+  <section class="list" aria-labelledby="h-pas">
+    <h2 id="h-pas">Lo que ya pasó</h2>
+    <div class="list" id="l-pas"></div>
+  </section>
+</div>
+
+<!-- Formulario -->
+<div class="wrap" id="v-editor" hidden>
+  <header>
+    <h1 id="ed-titulo">Agregar</h1>
+    <p class="sub">La hora se escribe en hora de Ecuador.</p>
+  </header>
+  <div class="sheet">
+    <label for="f-tipo">¿Qué es?
+      <select id="f-tipo"></select>
+    </label>
+    <div class="row">
+      <label for="f-fecha">Día<input id="f-fecha" type="date"></label>
+      <label for="f-hora">Hora (Ecuador)<input id="f-hora" type="time"></label>
+    </div>
+    <label for="f-titulo">Título<input id="f-titulo" placeholder="Ej.: Inmunoterapia, ciclo 3"></label>
+    <label for="f-novedades">¿Cómo fue? ¿Hubo novedades?<textarea id="f-novedades" placeholder="Escríbelo como se lo contarías a tus hermanos. Si todavía no pasa, déjalo vacío."></textarea></label>
+    <label for="f-paso">Siguiente paso (opcional)<input id="f-paso" placeholder="Ej.: Exámenes de sangre antes del próximo ciclo"></label>
+
+    <fieldset>
+      <legend>Pagos</legend>
+      <div id="pagos"></div>
+      <button class="btn ghost" id="b-pago" type="button">+ Agregar un pago</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Archivos</legend>
+      <p class="small muted">Fotos de transferencias, resultados en PDF, recetas…</p>
+      <div class="files" id="ed-files"></div>
+      <label for="f-archivos" class="btn ghost" style="text-align:center;display:block">+ Subir foto o PDF
+        <input id="f-archivos" type="file" accept="image/*,application/pdf" multiple hidden>
+      </label>
+    </fieldset>
+
+    <label for="f-quien">¿Quién escribe?<input id="f-quien" placeholder="Tu nombre"></label>
+    <button class="btn" id="b-guardar">Guardar</button>
+    <button class="btn ghost" id="b-cancelar">Cancelar</button>
+    <button class="btn danger" id="b-borrar" hidden>Borrar esto</button>
+  </div>
+</div>
+
+<div class="add" id="barra" hidden><button class="btn" id="b-nuevo">+ Agregar</button></div>
+<div id="capa"></div>
+
+<script>
+const TZ = 'America/Guayaquil';
+const TIPOS = {
+  inmuno: 'Inmunoterapia',
+  quimio: 'Quimioterapia',
+  cita: 'Cita médica',
+  examen: 'Examen',
+  nota: 'Nota'
+};
+const FORMAS = ['Transferencia', 'Tarjeta de crédito', 'Tarjeta de débito', 'Efectivo', 'Seguro médico', 'Otro'];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const guardarLocal = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const leerLocal = (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+const dinero = (n) => '$' + Number(n || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+let CLAVE = '';
+let datos = { eventos: [], pagos: [], archivos: [] };
+let filtro = 'todo';
+let edicion = null;      // evento que se está editando (o null si es nuevo)
+let nuevos = [];         // archivos elegidos para subir
+let quitar = new Set();  // archivos existentes a quitar
+
+/* ---------- Clave ---------- */
+function ponerClaveEnEnlace(k) {
+  const u = new URL(location.href);
+  u.searchParams.set('k', k);
+  history.replaceState(null, '', u);
+}
+function iniciarClave() {
+  const k = new URL(location.href).searchParams.get('k') || leerLocal('clave');
+  if (k) { CLAVE = k; guardarLocal('clave', k); ponerClaveEnEnlace(k); cargar(); }
+  else mostrar('v-llave');
+}
+$('b-llave').addEventListener('click', () => {
+  const k = $('i-llave').value.trim();
+  if (!k) return;
+  CLAVE = k; guardarLocal('clave', k); ponerClaveEnEnlace(k); cargar();
+});
+
+/* ---------- Pantallas ---------- */
+function mostrar(v) {
+  ['v-llave', 'v-inicio', 'v-editor'].forEach(id => $(id).hidden = id !== v);
+  $('barra').hidden = v !== 'v-inicio';
+  window.scrollTo(0, 0);
+}
+function aviso(txt) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = txt;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+/* ---------- Comunicación con Google ---------- */
+async function api(params, cuerpo) {
+  let r;
+  if (cuerpo) {
+    r = await fetch(API, { method: 'POST', body: JSON.stringify({ k: CLAVE, ...cuerpo }) });
+  } else {
+    const u = new URL(API);
+    u.searchParams.set('k', CLAVE);
+    Object.entries(params || {}).forEach(([a, b]) => u.searchParams.set(a, b));
+    r = await fetch(u);
+  }
+  const j = await r.json();
+  if (j.error === 'Clave incorrecta') {
+    guardarLocal('clave', '');
+    CLAVE = '';
+    $('llave-error').hidden = false;
+    mostrar('v-llave');
+    throw new Error('clave');
+  }
+  if (j.error) throw new Error(j.error);
+  return j;
+}
+
+async function cargar() {
+  mostrar('v-inicio');
+  $('l-prox').innerHTML = '<p class="empty">Cargando…</p>';
+  $('l-pas').innerHTML = '';
+  try {
+    datos = await api({ accion: 'listar' });
+    pintar();
+  } catch (e) {
+    if (e.message !== 'clave') $('l-prox').innerHTML = '<p class="empty">No se pudo cargar. Revisa tu internet y vuelve a abrir la app.</p>';
+  }
+}
+
+/* ---------- Fechas ---------- */
+const miZona = Intl.DateTimeFormat().resolvedOptions().timeZone;
+function textoFecha(iso, zona) {
+  return new Date(iso).toLocaleString('es-EC', {
+    timeZone: zona, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit'
+  });
+}
+function lineasFecha(iso) {
+  const ec = textoFecha(iso, TZ);
+  let html = `${esc(ec)} <span class="small">(hora Ecuador)</span>`;
+  if (miZona && miZona !== TZ) {
+    const mia = textoFecha(iso, miZona);
+    if (mia !== ec) html += `<br><span class="small">En tu hora: ${esc(mia)}</span>`;
+  }
+  return html;
+}
+
+/* ---------- Pintar la pantalla principal ---------- */
+function pintarFiltros() {
+  const ops = [['todo', 'Todo'], ...Object.entries(TIPOS)];
+  $('filtros').innerHTML = ops.map(([k, n]) =>
+    `<button class="chip" data-f="${k}" aria-pressed="${k === filtro}">${esc(n)}</button>`).join('');
+  $('filtros').querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.f; pintar(); }));
+}
+
+function tarjeta(e) {
+  const pagos = datos.pagos.filter(p => p.eventoId === e.id);
+  const archs = datos.archivos.filter(a => a.eventoId === e.id);
+  const total = pagos.reduce((s, p) => s + Number(p.monto || 0), 0);
+  const pagosHtml = pagos.length ? `<div class="pay">
+      <div class="row1"><span>Pago</span><span class="num">${dinero(total)}</span></div>
+      ${pagos.map(p => `<span class="small">${esc(p.forma)}: <span class="num">${dinero(p.monto)}</span>${p.detalle ? ' · ' + esc(p.detalle) : ''}${p.quienPago ? ' · pagó ' + esc(p.quienPago) : ''}</span>`).join('')}
+    </div>` : '';
+  const archHtml = archs.length ? `<div class="files">${archs.map(a =>
+      `<button class="file" data-arch="${esc(a.id)}">${a.tipo === 'application/pdf' ? 'PDF' : 'Foto'} · ${esc(a.nombre)}</button>`).join('')}</div>` : '';
+  return `<article class="entry" style="--t:var(--${esc(e.tipo)})">
+    <div class="top"><span class="tag">${esc(TIPOS[e.tipo] || e.tipo)}</span></div>
+    <h3>${esc(e.titulo)}</h3>
+    <p class="date">${lineasFecha(e.inicio)}</p>
+    ${e.novedades ? `<p style="white-space:pre-line">${esc(e.novedades)}</p>` : ''}
+    ${e.siguientePaso ? `<p class="step"><b>Siguiente paso:</b> ${esc(e.siguientePaso)}</p>` : ''}
+    ${pagosHtml}${archHtml}
+    <div class="foot"><span>${e.quien ? 'Escribió: ' + esc(e.quien) : ''}</span>
+      <span class="links">
+        <a class="link" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(textoWhatsApp(e, total))}">WhatsApp</a>
+        <button class="link" data-editar="${esc(e.id)}">Editar</button>
+      </span>
+    </div>
+  </article>`;
+}
+
+function textoWhatsApp(e, total) {
+  let t = `*${TIPOS[e.tipo] || ''}: ${e.titulo}*\n${textoFecha(e.inicio, TZ)} (hora Ecuador)`;
+  if (e.novedades) t += `\n\n${e.novedades}`;
+  if (e.siguientePaso) t += `\n\nSiguiente paso: ${e.siguientePaso}`;
+  if (total) t += `\n\nPago: ${dinero(total)}`;
+  return t;
+}
+
+function pintar() {
+  pintarFiltros();
+  const ahora = Date.now();
+  const lista = datos.eventos.filter(e => filtro === 'todo' || e.tipo === filtro);
+  const prox = lista.filter(e => new Date(e.inicio).getTime() > ahora - 3 * 3600e3)
+    .sort((a, b) => a.inicio.localeCompare(b.inicio));
+  const pas = lista.filter(e => !prox.includes(e)).sort((a, b) => b.inicio.localeCompare(a.inicio));
+
+  const sig = datos.eventos.filter(e => e.tipo !== 'nota' && new Date(e.inicio).getTime() > ahora)
+    .sort((a, b) => a.inicio.localeCompare(b.inicio))[0];
+  $('proxima').hidden = !sig;
+  if (sig) $('proxima').innerHTML = `<span class="lbl">Lo próximo</span>
+    <span class="what">${esc(sig.titulo)}</span><span>${lineasFecha(sig.inicio)}</span>`;
+
+  const total = datos.pagos.reduce((s, p) => s + Number(p.monto || 0), 0);
+  const mes = new Date().toLocaleDateString('en-CA', { timeZone: TZ }).slice(0, 7);
+  const delMes = datos.pagos.filter(p => {
+    const e = datos.eventos.find(x => x.id === p.eventoId);
+    return e && e.inicio.slice(0, 7) === mes;
+  }).reduce((s, p) => s + Number(p.monto || 0), 0);
+  $('stats').innerHTML = `<div class="stat"><span class="small muted">Pagado este mes</span><b>${dinero(delMes)}</b></div>
+    <div class="stat"><span class="small muted">Pagado en total</span><b>${dinero(total)}</b></div>`;
+
+  $('s-prox').hidden = !prox.length && filtro !== 'todo';
+  $('l-prox').innerHTML = prox.length ? prox.map(tarjeta).join('')
+    : '<p class="empty">No hay nada pendiente. Toca «Agregar» para poner la próxima sesión.</p>';
+  $('l-pas').innerHTML = pas.length ? pas.map(tarjeta).join('') : '<p class="empty">Todavía no hay nada aquí.</p>';
+
+  document.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () =>
+    abrirEditor(datos.eventos.find(e => e.id === b.dataset.editar))));
+  document.querySelectorAll('[data-arch]').forEach(b => b.addEventListener('click', () => verArchivo(b.dataset.arch)));
+}
+
+/* ---------- Ver archivos ---------- */
+function capa(html) {
+  $('capa').innerHTML = `<div class="overlay" id="ov"><div class="box" role="dialog" aria-modal="true">${html}</div></div>`;
+  $('ov').addEventListener('click', ev => { if (ev.target.id === 'ov' || ev.target.dataset.cerrar !== undefined) cerrarCapa(); });
+}
+function cerrarCapa() { $('capa').innerHTML = ''; }
+
+async function verArchivo(id) {
+  capa('<p>Abriendo archivo…</p>');
+  try {
+    const a = await api({ accion: 'archivo', id });
+    const bytes = Uint8Array.from(atob(a.base64), c => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: a.tipo }));
+    const vista = a.tipo.startsWith('image/') ? `<img src="${url}" alt="${esc(a.nombre)}">` : '';
+    capa(`<h3>${esc(a.nombre)}</h3>${vista}
+      <a class="btn" style="text-align:center;text-decoration:none" href="${url}" target="_blank" download="${esc(a.nombre)}">Abrir o descargar</a>
+      <button class="btn ghost" data-cerrar>Cerrar</button>`);
+  } catch (e) {
+    if (e.message !== 'clave') capa(`<p>No se pudo abrir el archivo.</p><button class="btn ghost" data-cerrar>Cerrar</button>`);
+  }
+}
+
+/* ---------- Editor ---------- */
+$('f-tipo').innerHTML = Object.entries(TIPOS).map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('');
+
+function filaPago(p = {}) {
+  const d = document.createElement('div');
+  d.className = 'payrow';
+  d.innerHTML = `<div class="row">
+      <label>Monto (USD)<input class="p-monto" type="number" inputmode="decimal" step="0.01" min="0" value="${esc(p.monto || '')}"></label>
+      <label>¿Cómo se pagó?<select class="p-forma">${FORMAS.map(f => `<option ${f === p.forma ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
+    </div>
+    <div class="row">
+      <label>Detalle<input class="p-detalle" placeholder="Banco, número de comprobante…" value="${esc(p.detalle || '')}"></label>
+      <label>¿Quién pagó?<input class="p-quien" value="${esc(p.quienPago || '')}"></label>
+    </div>
+    <button type="button" class="link" style="align-self:flex-start;color:var(--danger)">Quitar este pago</button>`;
+  d.querySelector('button').addEventListener('click', () => d.remove());
+  $('pagos').appendChild(d);
+}
+$('b-pago').addEventListener('click', () => filaPago());
+
+function pintarArchivosEditor() {
+  const exist = edicion ? datos.archivos.filter(a => a.eventoId === edicion.id && !quitar.has(a.id)) : [];
+  $('ed-files').innerHTML =
+    exist.map(a => `<button type="button" class="file" data-q="${esc(a.id)}">✕ ${esc(a.nombre)}</button>`).join('') +
+    nuevos.map((f, i) => `<button type="button" class="file" data-n="${i}">✕ ${esc(f.name)} (nuevo)</button>`).join('');
+  $('ed-files').querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => { quitar.add(b.dataset.q); pintarArchivosEditor(); }));
+  $('ed-files').querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { nuevos.splice(+b.dataset.n, 1); pintarArchivosEditor(); }));
+}
+$('f-archivos').addEventListener('change', ev => {
+  nuevos.push(...ev.target.files);
+  ev.target.value = '';
+  pintarArchivosEditor();
+});
+
+function abrirEditor(e) {
+  edicion = e || null;
+  nuevos = []; quitar = new Set();
+  $('ed-titulo').textContent = e ? 'Editar' : 'Agregar';
+  $('f-tipo').value = e ? e.tipo : 'inmuno';
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+  $('f-fecha').value = e ? e.inicio.slice(0, 10) : hoy;
+  $('f-hora').value = e ? e.inicio.slice(11, 16) : '09:00';
+  $('f-titulo').value = e ? e.titulo : '';
+  $('f-novedades').value = e ? e.novedades : '';
+  $('f-paso').value = e ? e.siguientePaso : '';
+  $('f-quien').value = leerLocal('quien') || (e ? e.quien : '');
+  $('pagos').innerHTML = '';
+  if (e) datos.pagos.filter(p => p.eventoId === e.id).forEach(filaPago);
+  $('b-borrar').hidden = !e;
+  pintarArchivosEditor();
+  mostrar('v-editor');
+}
+$('b-nuevo').addEventListener('click', () => abrirEditor(null));
+$('b-cancelar').addEventListener('click', () => mostrar('v-inicio'));
+
+// Achica las fotos para que suban rápido.
+async function preparar(file) {
+  let f = file;
+  if (file.type.startsWith('image/') && file.type !== 'image/gif') {
+    try {
+      const img = await createImageBitmap(file);
+      const s = Math.min(1, 1800 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
+      if (blob) f = new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+    } catch (e) { /* si no se puede achicar, se sube tal cual */ }
+  }
+  const base64 = await new Promise((ok, mal) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(',')[1]);
+    r.onerror = mal;
+    r.readAsDataURL(f);
+  });
+  return { nombre: f.name, tipo: f.type || 'application/octet-stream', base64 };
+}
+
+$('b-guardar').addEventListener('click', async () => {
+  const titulo = $('f-titulo').value.trim() || TIPOS[$('f-tipo').value];
+  if (!$('f-fecha').value) { $('f-fecha').focus(); return; }
+  const quien = $('f-quien').value.trim();
+  if (quien) guardarLocal('quien', quien);
+  const pagos = [...document.querySelectorAll('.payrow')].map(d => ({
+    monto: d.querySelector('.p-monto').value,
+    forma: d.querySelector('.p-forma').value,
+    detalle: d.querySelector('.p-detalle').value.trim(),
+    quienPago: d.querySelector('.p-quien').value.trim()
+  })).filter(p => p.monto || p.detalle);
+
+  const b = $('b-guardar');
+  b.disabled = true; b.textContent = nuevos.length ? 'Subiendo archivos…' : 'Guardando…';
+  try {
+    const archivos = [];
+    for (const f of nuevos) archivos.push(await preparar(f));
+    const peso = archivos.reduce((s, a) => s + a.base64.length, 0);
+    if (peso > 35e6) throw new Error('Los archivos son muy pesados. Sube menos a la vez.');
+    await api(null, {
+      accion: 'guardar',
+      evento: {
+        id: edicion ? edicion.id : '',
+        tipo: $('f-tipo').value,
+        inicio: `${$('f-fecha').value}T${$('f-hora').value || '09:00'}:00-05:00`,
+        titulo,
+        novedades: $('f-novedades').value.trim(),
+        siguientePaso: $('f-paso').value.trim(),
+        quien
+      },
+      pagos,
+      archivos,
+      quitarArchivos: [...quitar]
+    });
+    aviso('Guardado');
+    await cargar();
+  } catch (e) {
+    if (e.message !== 'clave') aviso(e.message.startsWith('Los archivos') ? e.message : 'No se pudo guardar. Revisa tu internet e intenta otra vez.');
+  } finally {
+    b.disabled = false; b.textContent = 'Guardar';
+  }
+});
+
+$('b-borrar').addEventListener('click', () => {
+  if (!edicion) return;
+  capa(`<h3>¿Borrar «${esc(edicion.titulo)}»?</h3>
+    <p>Se borra para todos, junto con sus pagos y archivos. También sale del calendario.</p>
+    <button class="btn danger" id="si-borrar">Sí, borrar</button>
+    <button class="btn ghost" data-cerrar>No, volver</button>`);
+  $('si-borrar').addEventListener('click', async () => {
+    $('si-borrar').disabled = true;
+    try { await api(null, { accion: 'borrar', id: edicion.id }); cerrarCapa(); aviso('Borrado'); await cargar(); }
+    catch (e) { cerrarCapa(); if (e.message !== 'clave') aviso('No se pudo borrar. Intenta otra vez.'); }
+  });
+});
+
+/* ---------- Arranque ---------- */
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+iniciarClave();
+</script>
+</body>
+</html>
