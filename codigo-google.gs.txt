@@ -301,9 +301,12 @@ function doGet(e) {
     const blob = DriveApp.getFileById(m.fotoId).getBlob();
     return json({ tipo: m.fotoTipo, base64: Utilities.base64Encode(blob.getBytes()) });
   }
-  // Mensajes para mamá los ve toda la familia. Los que escribe mamá, solo a quienes ella eligió.
+  // Mensajes privados: lo que alguien le escribe a mamá lo ven solo ella y quien lo escribió.
+  // Lo que escribe mamá lo ven solo las personas que ella eligió.
   const mensajes = tabla('Mensajes').filas.filter(function (m) {
-    return !m.para || m.quien === u.nombre || m.para.split('|').indexOf(u.nombre) >= 0;
+    if (m.quien === u.nombre) return true;
+    if (!m.para) return u.mama;
+    return m.para.split('|').indexOf(u.nombre) >= 0;
   }).slice(-200).reverse().map(function (m) {
     return { id: m.id, fecha: m.fecha, quien: m.quien, texto: m.texto, foto: m.fotoId ? true : false,
       para: m.para ? m.para.split('|') : [] };
@@ -611,7 +614,7 @@ function nuevoMensaje(d, u) {
 function borrarMensaje(id, u) {
   const m = tabla('Mensajes').filas.find(function (x) { return x.id === id; });
   if (!m) return { ok: true };
-  if (!u.admin && m.quien !== u.nombre) return { error: 'Solo puedes borrar tus propios mensajes.' };
+  if (m.quien !== u.nombre) return { error: 'Solo puedes borrar tus propios mensajes.' };
   borrarDonde('Mensajes', 'id', id);
   if (m.fotoId) aPapeleraDrive([{ driveId: m.fotoId }]);
   registrar(u.nombre, 'Borró un mensaje de ' + m.quien);

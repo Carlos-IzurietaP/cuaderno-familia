@@ -315,7 +315,7 @@ label.pend-item{flex-direction:row;gap:12px;align-items:flex-start;font-weight:4
   <header>
     <button class="link volver">← Volver</button>
     <h1>Mensajes para mamá</h1>
-    <p class="sub">Ella los ve en su app. Un mensaje antes de cada sesión le alegra el día.</p>
+    <p class="sub">Lo que le escribes es privado: solo lo ven tu mamá y tú. Aquí también aparece lo que ella te escribe.</p>
   </header>
   <section class="sheet">
     <label for="msj-texto">Tu mensaje<textarea id="msj-texto" placeholder="Fuerza, mami, hoy es el ciclo 5. Te queremos."></textarea></label>
@@ -1500,7 +1500,7 @@ function nuevosDeMama() {
 }
 function pintarMensajes() {
   guardarLocal('visto-msj', new Date().toISOString());
-  $('msj-lista').innerHTML = mensajesHtml(datos.mensajes || [], m => YO.admin || m.quien === YO.nombre);
+  $('msj-lista').innerHTML = mensajesHtml(datos.mensajes || [], m => m.quien === YO.nombre);
   cargarFotos($('msj-lista'));
 }
 let fotoMsj = null;
