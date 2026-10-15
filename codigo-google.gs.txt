@@ -1,0 +1,296 @@
+/**
+ * Cuaderno familia — programa de Google que guarda todo en tu Drive.
+ * Versión 2: un enlace por persona.
+ *
+ * Para cambiar quién usa la app, edita la lista USUARIOS de abajo
+ * y vuelve a ejecutar "crearEnlaces".
+ */
+
+const NOMBRE = 'Cuaderno familia';
+const NOMBRE_CALENDARIO = 'Tratamiento de Mamá';
+const DIRECCION_APP = 'https://carlos-izurietap.github.io/cuaderno-familia/';
+
+// Quién usa la app.
+//   true  = administrador: ve y puede todo.
+//   false = ve toda la información médica, pero en pagos solo los suyos
+//           (y el total de cada sesión). No puede borrar registros completos.
+const USUARIOS = [
+  ['Ariana', true],
+  ['Carlos Alberto', true],
+  ['Juan Xavier', true],
+  ['Marisol', true],
+  ['Mami Esperanza', false],
+  ['GOPA', false],
+  ['Tía Nena', false]
+];
+
+function props() { return PropertiesService.getScriptProperties(); }
+
+/** Solo para una instalación nueva desde cero. */
+function instalar() {
+  const p = props();
+  if (p.getProperty('SS')) {
+    Logger.log('Ya estaba instalado. Para ver los enlaces, ejecuta "crearEnlaces".');
+    return;
+  }
+  const carpeta = DriveApp.createFolder(NOMBRE + ' (privado)');
+  const archivos = carpeta.createFolder('Archivos');
+  const ss = SpreadsheetApp.create(NOMBRE + ' - datos');
+  DriveApp.getFileById(ss.getId()).moveTo(carpeta);
+  const columnas = {
+    Eventos: ['id', 'tipo', 'inicio', 'duracionMin', 'titulo', 'novedades', 'siguientePaso', 'quien', 'creado', 'calId'],
+    Pagos: ['id', 'eventoId', 'monto', 'forma', 'detalle', 'quienPago', 'creado'],
+    Archivos: ['id', 'eventoId', 'nombre', 'tipo', 'driveId', 'creado', 'pagoId']
+  };
+  const primera = ss.getSheets()[0];
+  Object.keys(columnas).forEach(function (nombre, i) {
+    const h = i === 0 ? primera.setName(nombre) : ss.insertSheet(nombre);
+    h.getRange('A:Z').setNumberFormat('@');
+    h.appendRow(columnas[nombre]);
+    h.setFrozenRows(1);
+  });
+  const cal = CalendarApp.createCalendar(NOMBRE_CALENDARIO, { timeZone: 'America/Guayaquil' });
+  p.setProperties({ SS: ss.getId(), CARPETA: archivos.getId(), CAL: cal.getId() });
+  crearEnlaces();
+}
+
+/**
+ * Crea una clave para cada persona de la lista y muestra su enlace.
+ * Se puede ejecutar las veces que quieras: las claves que ya existen no cambian.
+ * La clave compartida de antes deja de funcionar.
+ */
+function crearEnlaces() {
+  const p = props();
+  if (!p.getProperty('SS')) throw new Error('Primero ejecuta "instalar".');
+  const claves = JSON.parse(p.getProperty('CLAVES') || '{}');
+  USUARIOS.forEach(function (u) {
+    if (!claves[u[0]]) claves[u[0]] = Utilities.getUuid().replace(/-/g, '').slice(0, 16);
+  });
+  p.setProperty('CLAVES', JSON.stringify(claves));
+  p.deleteProperty('CLAVE');
+
+  // Columna nueva para saber a qué pago pertenece cada comprobante.
+  const ha = hoja('Archivos');
+  if (String(ha.getRange(1, 7).getValue()) !== 'pagoId') {
+    ha.getRange(1, 7).setValue('pagoId');
+    ha.getRange('G:G').setNumberFormat('@');
+  }
+
+  Logger.log('Enlaces (manda a cada persona SOLO el suyo):');
+  USUARIOS.forEach(function (u) {
+    Logger.log(u[0] + (u[1] ? ' (admin)' : '') + ':  ' + DIRECCION_APP + '?k=' + claves[u[0]]);
+  });
+}
+
+/** Si un enlace se filtra: ejecuta esto. Crea claves nuevas para todos y las viejas dejan de funcionar. */
+function cambiarTodasLasClaves() {
+  props().deleteProperty('CLAVES');
+  crearEnlaces();
+}
+
+/* ---------- Ayudantes ---------- */
+
+function usuario(k) {
+  if (!k) return null;
+  const claves = JSON.parse(props().getProperty('CLAVES') || '{}');
+  for (let i = 0; i < USUARIOS.length; i++) {
+    if (claves[USUARIOS[i][0]] === k) return { nombre: USUARIOS[i][0], admin: USUARIOS[i][1] };
+  }
+  return null;
+}
+
+function hoja(nombre) {
+  return SpreadsheetApp.openById(props().getProperty('SS')).getSheetByName(nombre);
+}
+
+function filas(nombre) {
+  const v = hoja(nombre).getDataRange().getValues();
+  const cab = v.shift();
+  return v.map(function (r) {
+    const o = {};
+    cab.forEach(function (c, i) { o[c] = r[i] == null ? '' : String(r[i]); });
+    return o;
+  });
+}
+
+function json(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Número de fila (1 = encabezado) donde la columna A vale `id`, o -1. */
+function filaDe(nombre, id) {
+  const v = hoja(nombre).getRange('A:A').getValues();
+  for (let i = 1; i < v.length; i++) if (String(v[i][0]) === id) return i + 1;
+  return -1;
+}
+
+/** Borra todas las filas donde la columna `col` (1 = A) vale `valor`. Devuelve las filas borradas. */
+function borrarFilas(nombre, col, valor) {
+  const h = hoja(nombre);
+  const v = h.getDataRange().getValues();
+  const borradas = [];
+  for (let i = v.length - 1; i >= 1; i--) {
+    if (String(v[i][col - 1]) === valor) { borradas.push(v[i]); h.deleteRow(i + 1); }
+  }
+  return borradas;
+}
+
+/** Quita filas de Archivos y manda sus archivos a la papelera de Drive (se recuperan en 30 días). */
+function papelera(filasBorradas) {
+  filasBorradas.forEach(function (r) {
+    try { DriveApp.getFileById(String(r[4])).setTrashed(true); } catch (x) {}
+  });
+}
+
+/* ---------- Lectura ---------- */
+
+function doGet(e) {
+  const q = (e && e.parameter) || {};
+  const u = usuario(q.k);
+  if (!u) return json({ error: 'Clave incorrecta' });
+
+  const pagos = filas('Pagos');
+  const archivos = filas('Archivos');
+  const visibles = {};
+  pagos.forEach(function (p) { if (u.admin || p.quienPago === u.nombre) visibles[p.id] = true; });
+  // Los archivos de la sesión los ven todos; los comprobantes, solo quien pagó y los admin.
+  const puedeVer = function (a) { return u.admin || !a.pagoId || visibles[a.pagoId]; };
+
+  if (q.accion === 'archivo') {
+    const a = archivos.find(function (x) { return x.id === q.id; });
+    if (!a || !puedeVer(a)) return json({ error: 'Ese archivo ya no existe' });
+    const blob = DriveApp.getFileById(a.driveId).getBlob();
+    return json({ nombre: a.nombre, tipo: a.tipo, base64: Utilities.base64Encode(blob.getBytes()) });
+  }
+
+  const totales = {};
+  pagos.forEach(function (p) { totales[p.eventoId] = (totales[p.eventoId] || 0) + (Number(p.monto) || 0); });
+
+  return json({
+    yo: u,
+    eventos: filas('Eventos').map(function (r) { delete r.calId; return r; }),
+    pagos: pagos.filter(function (p) { return visibles[p.id]; }),
+    archivos: archivos.filter(puedeVer).map(function (r) { delete r.driveId; return r; }),
+    totales: totales
+  });
+}
+
+/* ---------- Escritura ---------- */
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const d = JSON.parse(e.postData.contents);
+    const u = usuario(d.k);
+    if (!u) return json({ error: 'Clave incorrecta' });
+    if (d.accion === 'guardar') return json(guardar(d, u));
+    if (d.accion === 'borrar') return json(borrar(d.id, u));
+    return json({ error: 'Acción desconocida' });
+  } catch (err) {
+    return json({ error: String(err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function guardar(d, u) {
+  const ev = d.evento;
+  const ahora = new Date().toISOString();
+  const h = hoja('Eventos');
+  const id = ev.id || Utilities.getUuid();
+  const fila = filaDe('Eventos', id);
+  const previa = fila > 0 ? h.getRange(fila, 1, 1, 10).getValues()[0].map(String) : null;
+  const creado = previa ? previa[8] : ahora;
+  const quien = previa ? previa[7] : u.nombre;
+
+  // Calendario compartido: crea o actualiza el evento, con avisos 1 día y 2 horas antes.
+  const cal = CalendarApp.getCalendarById(props().getProperty('CAL'));
+  const inicio = new Date(ev.inicio);
+  const dur = Number(ev.duracionMin) || 120;
+  const fin = new Date(inicio.getTime() + dur * 60000);
+  const desc = [ev.novedades, ev.siguientePaso ? 'Siguiente paso: ' + ev.siguientePaso : '']
+    .filter(String).join('\n\n') + '\n\nMás detalles en el Cuaderno familia.';
+  let calId = previa ? previa[9] : '';
+  let ce = null;
+  try { ce = calId ? cal.getEventById(calId) : null; } catch (x) { ce = null; }
+  if (ce) {
+    ce.setTitle(ev.titulo);
+    ce.setTime(inicio, fin);
+    ce.setDescription(desc);
+  } else {
+    ce = cal.createEvent(ev.titulo, inicio, fin, { description: desc });
+    ce.removeAllReminders();
+    ce.addPopupReminder(24 * 60);
+    ce.addPopupReminder(120);
+    calId = ce.getId();
+  }
+
+  const row = [id, ev.tipo, ev.inicio, String(dur), ev.titulo, ev.novedades || '', ev.siguientePaso || '',
+    quien, creado, calId];
+  if (fila > 0) h.getRange(fila, 1, 1, row.length).setValues([row]);
+  else h.appendRow(row);
+
+  // ---- Pagos ----
+  // Un admin maneja todos los pagos de la sesión. Los demás, solo los suyos.
+  const hp = hoja('Pagos');
+  const existentes = filas('Pagos').filter(function (p) { return p.eventoId === id; });
+  const mios = {}, deOtros = {};
+  existentes.forEach(function (p) {
+    if (u.admin || p.quienPago === u.nombre) mios[p.id] = true; else deOtros[p.id] = true;
+  });
+  const entrantes = (d.pagos || []).filter(function (p) { return !deOtros[p.id]; });
+  const vienen = {};
+  entrantes.forEach(function (p) { if (p.id) vienen[p.id] = true; });
+
+  Object.keys(mios).forEach(function (pid) {
+    if (!vienen[pid]) {
+      borrarFilas('Pagos', 1, pid);
+      papelera(borrarFilas('Archivos', 7, pid));
+      delete mios[pid];
+    }
+  });
+  entrantes.forEach(function (p) {
+    const pid = p.id || Utilities.getUuid();
+    const quienPago = u.admin ? (p.quienPago || '') : u.nombre;
+    const r = [pid, id, String(p.monto || ''), p.forma || '', p.detalle || '', quienPago, ahora];
+    const f = filaDe('Pagos', pid);
+    if (f > 0) hp.getRange(f, 1, 1, r.length).setValues([r]);
+    else hp.appendRow(r);
+    mios[pid] = true;
+  });
+
+  // ---- Archivos nuevos (en la carpeta privada de tu Drive) ----
+  const carpeta = DriveApp.getFolderById(props().getProperty('CARPETA'));
+  const ha = hoja('Archivos');
+  (d.archivos || []).forEach(function (a) {
+    if (a.pagoId && !mios[a.pagoId]) return; // comprobante de un pago ajeno: no se guarda
+    const blob = Utilities.newBlob(Utilities.base64Decode(a.base64), a.tipo, a.nombre);
+    const f = carpeta.createFile(blob);
+    ha.appendRow([Utilities.getUuid(), id, a.nombre, a.tipo, f.getId(), ahora, a.pagoId || '']);
+  });
+
+  // ---- Archivos que alguien quitó ----
+  // Un admin puede quitar cualquiera. Los demás, solo comprobantes de sus propios pagos.
+  if ((d.quitarArchivos || []).length) {
+    const todos = filas('Archivos');
+    d.quitarArchivos.forEach(function (aid) {
+      const a = todos.find(function (x) { return x.id === aid; });
+      if (!a) return;
+      if (u.admin || (a.pagoId && mios[a.pagoId])) papelera(borrarFilas('Archivos', 1, aid));
+    });
+  }
+
+  return { ok: true, id: id };
+}
+
+function borrar(id, u) {
+  if (!u.admin) return { error: 'Solo un administrador puede borrar registros completos.' };
+  const ev = borrarFilas('Eventos', 1, id)[0];
+  if (ev) {
+    try { CalendarApp.getCalendarById(props().getProperty('CAL')).getEventById(String(ev[9])).deleteEvent(); } catch (x) {}
+  }
+  borrarFilas('Pagos', 2, id);
+  papelera(borrarFilas('Archivos', 2, id));
+  return { ok: true };
+}

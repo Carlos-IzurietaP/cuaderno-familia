@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Marisol">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
-<script src="config.js?v=4"></script>
+<script src="config.js?v=5"></script>
 <style>
 :root{
   --bg:#f3f6f5; --card:#ffffff; --ink:#1d2b33; --muted:#5b6b72; --line:#d9e2e0;
@@ -100,6 +100,9 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
 .bar .pct{color:var(--muted);font-weight:400;font-size:.9rem;margin-left:6px}
 .bar .track{height:10px;background:var(--accent-soft);border-radius:999px;overflow:hidden}
 .bar .fill{height:100%;background:var(--accent);border-radius:999px;min-width:2px}
+.p-files{display:flex;gap:8px;flex-wrap:wrap}
+.p-subir{align-self:flex-start;cursor:pointer}
+.pay .file{font-size:.85rem;min-height:40px;padding:6px 10px}
 .pg-lista{display:flex;flex-direction:column}
 .pg-item{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px dashed var(--line)}
 .pg-item:last-child{border-bottom:0}
@@ -125,6 +128,7 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
   <header>
     <h1>Salud de Marisol</h1>
     <p class="sub">Lo que se ha hecho, en un solo lugar, para toda la familia.</p>
+    <p class="small muted" id="yo"></p>
   </header>
   <section class="next" id="proxima" hidden aria-label="Lo que viene"></section>
   <div class="stats" id="stats"></div>
@@ -155,12 +159,12 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
 <div class="wrap" id="v-pagos" hidden>
   <header>
     <button class="link" id="b-volver">← Volver</button>
-    <h1>Pagos</h1>
-    <p class="sub">Cuánto se ha pagado, quién pagó y cómo.</p>
+    <h1 id="pg-h">Pagos</h1>
+    <p class="sub" id="pg-sub">Cuánto se ha pagado, quién pagó y cómo.</p>
   </header>
   <div class="sheet">
     <div class="row">
-      <label for="pg-persona-f">Quién pagó<select id="pg-persona-f" class="pg-sel"></select></label>
+      <label for="pg-persona-f" id="pg-persona-l">Quién pagó<select id="pg-persona-f" class="pg-sel"></select></label>
       <label for="pg-mes">Mes<select id="pg-mes" class="pg-sel"></select></label>
     </div>
     <div class="row">
@@ -202,16 +206,15 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
     </fieldset>
 
     <fieldset>
-      <legend>Archivos</legend>
-      <p class="small muted">Fotos de transferencias, resultados en PDF, recetas…</p>
+      <legend>Archivos de la sesión</legend>
+      <p class="small muted">Resultados en PDF, recetas, órdenes médicas… Los ve toda la familia. Las fotos de transferencias van en cada pago.</p>
       <div class="files" id="ed-files"></div>
       <label for="f-archivos" class="btn ghost" style="text-align:center;display:block">+ Subir foto o PDF
         <input id="f-archivos" type="file" accept="image/*,application/pdf" multiple hidden>
       </label>
     </fieldset>
 
-    <label for="f-quien">¿Quién escribe?<select id="f-quien"></select></label>
-    <p class="small" id="quien-error" hidden style="color:var(--danger)">Elige quién está escribiendo.</p>
+    <p class="small muted" id="ed-yo"></p>
     <button class="btn" id="b-guardar">Guardar</button>
     <button class="btn ghost" id="b-cancelar">Cancelar</button>
     <button class="btn danger" id="b-borrar" hidden>Borrar esto</button>
@@ -238,7 +241,8 @@ const leerLocal = (k) => { try { return localStorage.getItem(k) || ''; } catch (
 const dinero = (n) => '$' + Number(n || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 let CLAVE = '';
-let datos = { eventos: [], pagos: [], archivos: [] };
+let datos = { eventos: [], pagos: [], archivos: [], totales: {} };
+let YO = { nombre: '', admin: true };
 let filtro = 'todo';
 let edicion = null;      // evento que se está editando (o null si es nuevo)
 let nuevos = [];         // archivos elegidos para subir
@@ -303,6 +307,8 @@ async function cargar() {
   $('l-pas').innerHTML = '';
   try {
     datos = await api({ accion: 'listar' });
+    datos.totales = datos.totales || {};
+    YO = datos.yo || { nombre: '', admin: true };
     pintar();
   } catch (e) {
     if (e.message !== 'clave') $('l-prox').innerHTML = '<p class="empty">No se pudo cargar. Revisa tu internet y vuelve a abrir la app.</p>';
@@ -403,14 +409,20 @@ document.addEventListener('click', ev => {
 
 function tarjeta(e) {
   const pagos = datos.pagos.filter(p => p.eventoId === e.id);
-  const archs = datos.archivos.filter(a => a.eventoId === e.id);
-  const total = pagos.reduce((s, p) => s + Number(p.monto || 0), 0);
-  const pagosHtml = pagos.length ? `<div class="pay">
-      <div class="row1"><span>Pago</span><span class="num">${dinero(total)}</span></div>
-      ${pagos.map(p => `<span class="small">${esc(p.forma)}: <span class="num">${dinero(p.monto)}</span>${p.detalle ? ' · ' + esc(p.detalle) : ''}${p.quienPago ? ' · pagó ' + esc(p.quienPago) : ''}</span>`).join('')}
+  const archs = datos.archivos.filter(a => a.eventoId === e.id && !a.pagoId);
+  const suma = pagos.reduce((s, p) => s + Number(p.monto || 0), 0);
+  const total = datos.totales[e.id] != null ? Number(datos.totales[e.id]) : suma;
+  const botonArch = (a) => `<button class="file" data-arch="${esc(a.id)}">${a.tipo === 'application/pdf' ? 'PDF' : 'Foto'} · ${esc(a.nombre)}</button>`;
+  const lineaPago = (p) => {
+    const comp = datos.archivos.filter(a => a.pagoId === p.id);
+    return `<span class="small">${YO.admin ? '' : 'Tu aporte · '}${esc(p.forma)}: <span class="num">${dinero(p.monto)}</span>${p.detalle ? ' · ' + esc(p.detalle) : ''}${YO.admin && p.quienPago ? ' · pagó ' + esc(p.quienPago) : ''}</span>
+      ${comp.length ? `<div class="files">${comp.map(botonArch).join('')}</div>` : ''}`;
+  };
+  const pagosHtml = (total || pagos.length) ? `<div class="pay">
+      <div class="row1"><span>${YO.admin ? 'Pago' : 'Costo de la sesión'}</span><span class="num">${dinero(total)}</span></div>
+      ${pagos.map(lineaPago).join('')}
     </div>` : '';
-  const archHtml = archs.length ? `<div class="files">${archs.map(a =>
-      `<button class="file" data-arch="${esc(a.id)}">${a.tipo === 'application/pdf' ? 'PDF' : 'Foto'} · ${esc(a.nombre)}</button>`).join('')}</div>` : '';
+  const archHtml = archs.length ? `<div class="files">${archs.map(botonArch).join('')}</div>` : '';
   return `<article class="entry" style="--t:var(--${esc(e.tipo)})">
     <div class="top"><span class="tag">${esc(TIPOS[e.tipo] || e.tipo)}</span></div>
     <h3>${esc(e.titulo)}</h3>
@@ -454,8 +466,10 @@ function pintar() {
     const e = datos.eventos.find(x => x.id === p.eventoId);
     return e && e.inicio.slice(0, 7) === mes;
   }).reduce((s, p) => s + Number(p.monto || 0), 0);
-  $('stats').innerHTML = `<div class="stat"><span class="small muted">Pagado este mes</span><b>${dinero(delMes)}</b></div>
-    <div class="stat"><span class="small muted">Pagado en total</span><b>${dinero(total)}</b></div>`;
+  $('stats').innerHTML = `<div class="stat"><span class="small muted">${YO.admin ? 'Pagado este mes' : 'Tu aporte este mes'}</span><b>${dinero(delMes)}</b></div>
+    <div class="stat"><span class="small muted">${YO.admin ? 'Pagado en total' : 'Tu aporte en total'}</span><b>${dinero(total)}</b></div>`;
+  $('b-desglose').textContent = YO.admin ? 'Ver desglose de pagos →' : 'Ver tus pagos →';
+  $('yo').textContent = YO.nombre ? `Entraste como ${YO.nombre}${YO.admin ? ' (administrador)' : ''}` : '';
 
   $('l-prox').innerHTML = prox.length ? prox.map(tarjeta).join('')
     : '<p class="empty">No hay nada pendiente. Toca «Agregar» para poner la próxima sesión.</p>';
@@ -487,6 +501,10 @@ function opciones(id, todos, valores, actual, nombre) {
 
 function pintarPagos() {
   const todos = datos.pagos;
+  $('pg-h').textContent = YO.admin ? 'Pagos' : 'Tus pagos';
+  $('pg-sub').textContent = YO.admin ? 'Cuánto se ha pagado, quién pagó y cómo.' : 'Lo que tú has aportado, y cómo.';
+  $('pg-persona-l').hidden = !YO.admin;
+  if (!YO.admin) pgPersona = '';
   const meses = [...new Set(todos.map(mesDePago).filter(Boolean))].sort().reverse();
   const personas = [...new Set([...(window.PAGADORES || []), ...todos.map(personaDe)])];
   const tipos = Object.values(TIPOS);
@@ -511,7 +529,7 @@ function pintarPagos() {
   $('pg-limpiar').hidden = !partes.length;
 
   // Cada desglose se esconde si ya se eligió esa misma cosa arriba
-  $('pg-persona-s').hidden = !!pgPersona; if (!pgPersona) barras('pg-persona', suma(personaDe));
+  $('pg-persona-s').hidden = !!pgPersona || !YO.admin; if (!pgPersona) barras('pg-persona', suma(personaDe));
   $('pg-tipo-s').hidden = !!pgTipo;       if (!pgTipo) barras('pg-tipo', suma(tipoDe));
   $('pg-forma-s').hidden = !!pgForma;     if (!pgForma) barras('pg-forma', suma(formaDe));
   $('pg-meses-s').hidden = !!pgMes;
@@ -572,39 +590,62 @@ $('f-tipo').innerHTML = Object.entries(TIPOS).map(([k, n]) => `<option value="${
 
 function filaPago(p = {}) {
   const lista = window.PAGADORES || [];
-  // Un pago nuevo sugiere a quien está escribiendo.
-  const actual = p.quienPago != null ? p.quienPago : $('f-quien').value;
+  // Un pago nuevo sugiere a quien está usando la app.
+  const actual = p.quienPago != null ? p.quienPago : YO.nombre;
   const esOtro = !!actual && !lista.includes(actual);
   const d = document.createElement('div');
   d.className = 'payrow';
+  d.dataset.id = p.id || nuevoId();
+  d.nuevos = [];
+  const quienHtml = YO.admin ? `<label>¿Quién pagó?<select class="p-quien">
+        <option value="">Elige</option>
+        ${lista.map(n => `<option ${n === actual ? 'selected' : ''}>${esc(n)}</option>`).join('')}
+        <option value="__otro" ${esOtro ? 'selected' : ''}>Otro</option>
+      </select></label>` : `<p class="small" style="align-self:end;padding-bottom:12px">Pagó: <b>${esc(YO.nombre)}</b></p>`;
   d.innerHTML = `<div class="row">
       <label>Monto (USD)<input class="p-monto" autocomplete="off" type="number" inputmode="decimal" step="0.01" min="0" value="${esc(p.monto || '')}"></label>
       <label>¿Cómo se pagó?<select class="p-forma">${FORMAS.map(f => `<option ${f === p.forma ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
     </div>
     <div class="row">
       <label>Detalle<input class="p-detalle" autocomplete="off" placeholder="Banco, número de comprobante…" value="${esc(p.detalle || '')}"></label>
-      <label>¿Quién pagó?<select class="p-quien">
-        <option value="">Elige</option>
-        ${lista.map(n => `<option ${n === actual ? 'selected' : ''}>${esc(n)}</option>`).join('')}
-        <option value="__otro" ${esOtro ? 'selected' : ''}>Otro</option>
-      </select></label>
+      ${quienHtml}
     </div>
-    <label class="p-otro-l" ${esOtro ? '' : 'hidden'}>Nombre de quien pagó<input class="p-otro" autocomplete="off" value="${esOtro ? esc(actual) : ''}" placeholder="Escribe el nombre"></label>
+    <label class="p-otro-l" ${esOtro && YO.admin ? '' : 'hidden'}>Nombre de quien pagó<input class="p-otro" autocomplete="off" value="${esOtro ? esc(actual) : ''}" placeholder="Escribe el nombre"></label>
+    <div class="p-files"></div>
+    <label class="link p-subir">+ Foto del comprobante<input class="p-file" type="file" accept="image/*,application/pdf" multiple hidden></label>
     <button type="button" class="link p-quitar" style="align-self:flex-start;color:var(--danger)">Quitar este pago</button>`;
   d.querySelector('.p-quitar').addEventListener('click', () => d.remove());
-  d.querySelector('.p-quien').addEventListener('change', ev => {
+  const sel = d.querySelector('.p-quien');
+  if (sel) sel.addEventListener('change', ev => {
     const otro = ev.target.value === '__otro';
     d.querySelector('.p-otro-l').hidden = !otro;
     if (otro) d.querySelector('.p-otro').focus();
   });
+  d.querySelector('.p-file').addEventListener('change', ev => {
+    d.nuevos.push(...ev.target.files);
+    ev.target.value = '';
+    pintarComprobantes(d);
+  });
   $('pagos').appendChild(d);
+  pintarComprobantes(d);
+}
+
+function pintarComprobantes(d) {
+  const exist = datos.archivos.filter(a => a.pagoId === d.dataset.id && !quitar.has(a.id));
+  const cont = d.querySelector('.p-files');
+  cont.innerHTML =
+    exist.map(a => `<button type="button" class="file" data-q="${esc(a.id)}">✕ ${esc(a.nombre)}</button>`).join('') +
+    d.nuevos.map((f, i) => `<button type="button" class="file" data-n="${i}">✕ ${esc(f.name)} (nuevo)</button>`).join('');
+  cont.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => { quitar.add(b.dataset.q); pintarComprobantes(d); }));
+  cont.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { d.nuevos.splice(+b.dataset.n, 1); pintarComprobantes(d); }));
 }
 $('b-pago').addEventListener('click', () => filaPago());
 
 function pintarArchivosEditor() {
-  const exist = edicion ? datos.archivos.filter(a => a.eventoId === edicion.id && !quitar.has(a.id)) : [];
+  const exist = edicion ? datos.archivos.filter(a => a.eventoId === edicion.id && !a.pagoId && !quitar.has(a.id)) : [];
   $('ed-files').innerHTML =
-    exist.map(a => `<button type="button" class="file" data-q="${esc(a.id)}">✕ ${esc(a.nombre)}</button>`).join('') +
+    exist.map(a => YO.admin ? `<button type="button" class="file" data-q="${esc(a.id)}">✕ ${esc(a.nombre)}</button>`
+                            : `<span class="file">${esc(a.nombre)}</span>`).join('') +
     nuevos.map((f, i) => `<button type="button" class="file" data-n="${i}">✕ ${esc(f.name)} (nuevo)</button>`).join('');
   $('ed-files').querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => { quitar.add(b.dataset.q); pintarArchivosEditor(); }));
   $('ed-files').querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { nuevos.splice(+b.dataset.n, 1); pintarArchivosEditor(); }));
@@ -627,14 +668,10 @@ function abrirEditor(e) {
   $('f-titulo').value = e ? e.titulo : '';
   $('f-novedades').value = e ? e.novedades : '';
   $('f-paso').value = e ? e.siguientePaso : '';
-  const personas = window.PERSONAS || [];
-  const elegido = personas.includes(leerLocal('quien')) ? leerLocal('quien') : '';
-  $('f-quien').innerHTML = '<option value="">Elige tu nombre</option>' +
-    personas.map(n => `<option ${n === elegido ? 'selected' : ''}>${esc(n)}</option>`).join('');
-  $('quien-error').hidden = true;
+  $('ed-yo').textContent = e ? (e.quien ? `Lo escribió ${e.quien}.` : '') : (YO.nombre ? `Se guardará como escrito por ${YO.nombre}.` : '');
   $('pagos').innerHTML = '';
   if (e) datos.pagos.filter(p => p.eventoId === e.id).forEach(filaPago);
-  $('b-borrar').hidden = !e;
+  $('b-borrar').hidden = !e || !YO.admin;
   pintarArchivosEditor();
   mostrar('v-editor');
 }
@@ -672,16 +709,24 @@ $('b-guardar').addEventListener('click', () => guardarForm(false));
 async function guardarForm(forzar) {
   const titulo = $('f-titulo').value.trim() || TIPOS[$('f-tipo').value];
   if (!$('f-fecha').value) { $('f-fecha').focus(); return; }
-  const quien = $('f-quien').value.trim();
-  if (!quien) { $('quien-error').hidden = false; $('f-quien').focus(); return; }
-  $('quien-error').hidden = true;
-  if (quien) guardarLocal('quien', quien);
-  const pagos = [...document.querySelectorAll('.payrow')].map(d => ({
+  const quien = YO.nombre;
+  const filas = [...document.querySelectorAll('.payrow')];
+  const quienDe = (d) => {
+    const sel = d.querySelector('.p-quien');
+    if (!sel) return YO.nombre;
+    return sel.value === '__otro' ? d.querySelector('.p-otro').value.trim() : sel.value;
+  };
+  const conDatos = filas.filter(d => d.querySelector('.p-monto').value || d.querySelector('.p-detalle').value.trim() ||
+    d.nuevos.length || datos.archivos.some(a => a.pagoId === d.dataset.id && !quitar.has(a.id)));
+  const pagos = conDatos.map(d => ({
+    id: d.dataset.id,
     monto: d.querySelector('.p-monto').value,
     forma: d.querySelector('.p-forma').value,
     detalle: d.querySelector('.p-detalle').value.trim(),
-    quienPago: d.querySelector('.p-quien').value === '__otro' ? d.querySelector('.p-otro').value.trim() : d.querySelector('.p-quien').value
-  })).filter(p => p.monto || p.detalle);
+    quienPago: quienDe(d)
+  }));
+  const comprobantes = conDatos.flatMap(d => d.nuevos.map(f => ({ f, pagoId: d.dataset.id })));
+  const hayArchivos = nuevos.length + comprobantes.length;
   const inicio = `${$('f-fecha').value}T${$('f-hora').value || '09:00'}:00-05:00`;
 
   // ¿Ya existe algo igual? (mismo tipo, día, hora y título)
@@ -702,12 +747,13 @@ async function guardarForm(forzar) {
   }
 
   const b = $('b-guardar');
-  b.disabled = true; b.textContent = nuevos.length ? 'Subiendo archivos…' : 'Guardando…';
-  capa(`<h3>${nuevos.length ? 'Subiendo archivos…' : 'Guardando…'}</h3>
-    <p>No cierres la app hasta que diga «Guardado». ${nuevos.length ? 'Con fotos o PDFs puede tardar un poco.' : ''}</p>`);
+  b.disabled = true; b.textContent = hayArchivos ? 'Subiendo archivos…' : 'Guardando…';
+  capa(`<h3>${hayArchivos ? 'Subiendo archivos…' : 'Guardando…'}</h3>
+    <p>No cierres la app hasta que diga «Guardado». ${hayArchivos ? 'Con fotos o PDFs puede tardar un poco.' : ''}</p>`);
   try {
     const archivos = [];
     for (const f of nuevos) archivos.push(await preparar(f));
+    for (const c of comprobantes) archivos.push({ ...(await preparar(c.f)), pagoId: c.pagoId });
     const peso = archivos.reduce((s, a) => s + a.base64.length, 0);
     if (peso > 35e6) throw new Error('Los archivos son muy pesados. Sube menos a la vez.');
     await api(null, {
@@ -730,7 +776,7 @@ async function guardarForm(forzar) {
     await cargar();
   } catch (e) {
     cerrarCapa();
-    if (e.message !== 'clave') aviso(e.message.startsWith('Los archivos') ? e.message : 'No se pudo guardar. Revisa tu internet e intenta otra vez.');
+    if (e.message !== 'clave') aviso(e instanceof TypeError ? 'No se pudo guardar. Revisa tu internet e intenta otra vez.' : e.message);
   } finally {
     b.disabled = false; b.textContent = 'Guardar';
   }
