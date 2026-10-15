@@ -617,6 +617,7 @@ $('f-archivos').addEventListener('change', ev => {
 
 function abrirEditor(e) {
   edicion = e || null;
+  formId = e ? e.id : nuevoId();
   nuevos = []; quitar = new Set();
   $('ed-titulo').textContent = e ? 'Editar' : 'Agregar';
   $('f-tipo').value = e ? e.tipo : 'inmuno';
@@ -663,7 +664,12 @@ async function preparar(file) {
   return { nombre: f.name, tipo: f.type || 'application/octet-stream', base64 };
 }
 
-$('b-guardar').addEventListener('click', async () => {
+// Cada formulario tiene su propio número desde que se abre. Si se guarda dos veces, se actualiza en vez de duplicarse.
+const nuevoId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+let formId = '';
+
+$('b-guardar').addEventListener('click', () => guardarForm(false));
+async function guardarForm(forzar) {
   const titulo = $('f-titulo').value.trim() || TIPOS[$('f-tipo').value];
   if (!$('f-fecha').value) { $('f-fecha').focus(); return; }
   const quien = $('f-quien').value.trim();
@@ -676,9 +682,29 @@ $('b-guardar').addEventListener('click', async () => {
     detalle: d.querySelector('.p-detalle').value.trim(),
     quienPago: d.querySelector('.p-quien').value === '__otro' ? d.querySelector('.p-otro').value.trim() : d.querySelector('.p-quien').value
   })).filter(p => p.monto || p.detalle);
+  const inicio = `${$('f-fecha').value}T${$('f-hora').value || '09:00'}:00-05:00`;
+
+  // ¿Ya existe algo igual? (mismo tipo, día, hora y título)
+  if (!edicion && !forzar) {
+    const igual = datos.eventos.find(x => x.id !== formId && x.tipo === $('f-tipo').value &&
+      x.inicio === inicio && normal(x.titulo) === normal(titulo));
+    if (igual) {
+      capa(`<h3>Esto ya está guardado</h3>
+        <p>Ya hay un registro igual: <b>${esc(igual.titulo)}</b>, ${esc(textoFecha(igual.inicio, TZ))}.</p>
+        <p>Puede que se haya guardado aunque la app se cerró. Revisa antes de guardarlo otra vez.</p>
+        <button class="btn" id="dup-ver">Ver el que ya existe</button>
+        <button class="btn ghost" id="dup-si">Guardar igual (es otro distinto)</button>
+        <button class="btn ghost" data-cerrar>Volver</button>`);
+      $('dup-ver').addEventListener('click', () => { cerrarCapa(); abrirEditor(igual); });
+      $('dup-si').addEventListener('click', () => { cerrarCapa(); guardarForm(true); });
+      return;
+    }
+  }
 
   const b = $('b-guardar');
   b.disabled = true; b.textContent = nuevos.length ? 'Subiendo archivos…' : 'Guardando…';
+  capa(`<h3>${nuevos.length ? 'Subiendo archivos…' : 'Guardando…'}</h3>
+    <p>No cierres la app hasta que diga «Guardado». ${nuevos.length ? 'Con fotos o PDFs puede tardar un poco.' : ''}</p>`);
   try {
     const archivos = [];
     for (const f of nuevos) archivos.push(await preparar(f));
@@ -687,9 +713,9 @@ $('b-guardar').addEventListener('click', async () => {
     await api(null, {
       accion: 'guardar',
       evento: {
-        id: edicion ? edicion.id : '',
+        id: edicion ? edicion.id : formId,
         tipo: $('f-tipo').value,
-        inicio: `${$('f-fecha').value}T${$('f-hora').value || '09:00'}:00-05:00`,
+        inicio,
         titulo,
         novedades: $('f-novedades').value.trim(),
         siguientePaso: $('f-paso').value.trim(),
@@ -699,14 +725,16 @@ $('b-guardar').addEventListener('click', async () => {
       archivos,
       quitarArchivos: [...quitar]
     });
+    cerrarCapa();
     aviso('Guardado');
     await cargar();
   } catch (e) {
+    cerrarCapa();
     if (e.message !== 'clave') aviso(e.message.startsWith('Los archivos') ? e.message : 'No se pudo guardar. Revisa tu internet e intenta otra vez.');
   } finally {
     b.disabled = false; b.textContent = 'Guardar';
   }
-});
+}
 
 $('b-borrar').addEventListener('click', () => {
   if (!edicion) return;
