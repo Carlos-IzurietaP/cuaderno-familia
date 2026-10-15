@@ -1,6 +1,7 @@
 /**
  * Cuaderno familia — programa de Google que guarda todo en tu Drive.
- * Versión 2: un enlace por persona.
+ * Versión 3: un enlace por persona, respaldo semanal, historial, papelera,
+ * ficha rápida, pendientes, síntomas y ciclos.
  *
  * Para cambiar quién usa la app, edita la lista USUARIOS de abajo
  * y vuelve a ejecutar "crearEnlaces".
@@ -9,6 +10,9 @@
 const NOMBRE = 'Cuaderno familia';
 const NOMBRE_CALENDARIO = 'Tratamiento de Mamá';
 const DIRECCION_APP = 'https://carlos-izurietap.github.io/cuaderno-familia/';
+const ZONA = 'America/Guayaquil';
+const DIAS_PAPELERA = 30;
+const RESPALDOS_A_GUARDAR = 8;
 
 // Quién usa la app.
 //   true  = administrador: ve y puede todo.
@@ -25,40 +29,75 @@ const USUARIOS = [
   ['Tía Nena', false]
 ];
 
+const COLUMNAS = {
+  Eventos: ['id', 'tipo', 'inicio', 'duracionMin', 'titulo', 'novedades', 'siguientePaso', 'quien', 'creado', 'calId',
+    'borrado', 'borradoPor', 'sintomas', 'pasoHecho', 'ciclo'],
+  Pagos: ['id', 'eventoId', 'monto', 'forma', 'detalle', 'quienPago', 'creado'],
+  Archivos: ['id', 'eventoId', 'nombre', 'tipo', 'driveId', 'creado', 'pagoId'],
+  Historial: ['fecha', 'quien', 'accion']
+};
+const CAMPOS_FICHA = ['medicinas', 'alergias', 'sangre', 'historia', 'hospital', 'seguro', 'contactos', 'otros',
+  'inmunoTotal', 'inmunoCada', 'quimioTotal', 'quimioCada'];
+
 function props() { return PropertiesService.getScriptProperties(); }
+
+/* =========================================================
+   Funciones para ejecutar a mano desde el editor
+   ========================================================= */
 
 /** Solo para una instalación nueva desde cero. */
 function instalar() {
   const p = props();
   if (p.getProperty('SS')) {
-    Logger.log('Ya estaba instalado. Para ver los enlaces, ejecuta "crearEnlaces".');
+    Logger.log('Ya estaba instalado. Ejecuta "configurar" y luego "crearEnlaces".');
     return;
   }
   const carpeta = DriveApp.createFolder(NOMBRE + ' (privado)');
   const archivos = carpeta.createFolder('Archivos');
   const ss = SpreadsheetApp.create(NOMBRE + ' - datos');
   DriveApp.getFileById(ss.getId()).moveTo(carpeta);
-  const columnas = {
-    Eventos: ['id', 'tipo', 'inicio', 'duracionMin', 'titulo', 'novedades', 'siguientePaso', 'quien', 'creado', 'calId'],
-    Pagos: ['id', 'eventoId', 'monto', 'forma', 'detalle', 'quienPago', 'creado'],
-    Archivos: ['id', 'eventoId', 'nombre', 'tipo', 'driveId', 'creado', 'pagoId']
-  };
-  const primera = ss.getSheets()[0];
-  Object.keys(columnas).forEach(function (nombre, i) {
-    const h = i === 0 ? primera.setName(nombre) : ss.insertSheet(nombre);
-    h.getRange('A:Z').setNumberFormat('@');
-    h.appendRow(columnas[nombre]);
-    h.setFrozenRows(1);
-  });
-  const cal = CalendarApp.createCalendar(NOMBRE_CALENDARIO, { timeZone: 'America/Guayaquil' });
+  ss.getSheets()[0].setName('Eventos');
+  const cal = CalendarApp.createCalendar(NOMBRE_CALENDARIO, { timeZone: ZONA });
   p.setProperties({ SS: ss.getId(), CARPETA: archivos.getId(), CAL: cal.getId() });
+  configurar();
   crearEnlaces();
 }
 
 /**
+ * Prepara la hoja para las funciones nuevas y activa el respaldo de cada domingo.
+ * Se puede ejecutar las veces que quieras sin dañar nada.
+ */
+function configurar() {
+  const ss = SpreadsheetApp.openById(props().getProperty('SS'));
+  Object.keys(COLUMNAS).forEach(function (nombre) {
+    let h = ss.getSheetByName(nombre);
+    if (!h) {
+      h = ss.insertSheet(nombre);
+      h.getRange('A:Z').setNumberFormat('@');
+      h.appendRow(COLUMNAS[nombre]);
+      h.setFrozenRows(1);
+      return;
+    }
+    h.getRange('A:Z').setNumberFormat('@');
+    const ultima = Math.max(1, h.getLastColumn());
+    const cab = h.getRange(1, 1, 1, ultima).getValues()[0].map(String);
+    COLUMNAS[nombre].forEach(function (c) {
+      if (cab.indexOf(c) < 0) { cab.push(c); h.getRange(1, cab.length).setValue(c); }
+    });
+  });
+
+  // Respaldo automático cada domingo de madrugada
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'respaldar') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('respaldar').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).create();
+  respaldar();
+  Logger.log('Listo. Respaldo semanal activado y primer respaldo hecho.');
+}
+
+/**
  * Crea una clave para cada persona de la lista y muestra su enlace.
- * Se puede ejecutar las veces que quieras: las claves que ya existen no cambian.
- * La clave compartida de antes deja de funcionar.
+ * Las claves que ya existen no cambian.
  */
 function crearEnlaces() {
   const p = props();
@@ -69,27 +108,45 @@ function crearEnlaces() {
   });
   p.setProperty('CLAVES', JSON.stringify(claves));
   p.deleteProperty('CLAVE');
-
-  // Columna nueva para saber a qué pago pertenece cada comprobante.
-  const ha = hoja('Archivos');
-  if (String(ha.getRange(1, 7).getValue()) !== 'pagoId') {
-    ha.getRange(1, 7).setValue('pagoId');
-    ha.getRange('G:G').setNumberFormat('@');
-  }
-
   Logger.log('Enlaces (manda a cada persona SOLO el suyo):');
   USUARIOS.forEach(function (u) {
     Logger.log(u[0] + (u[1] ? ' (admin)' : '') + ':  ' + DIRECCION_APP + '?k=' + claves[u[0]]);
   });
 }
 
-/** Si un enlace se filtra: ejecuta esto. Crea claves nuevas para todos y las viejas dejan de funcionar. */
+/** Si un enlace se filtra: crea claves nuevas para todos y las viejas dejan de funcionar. */
 function cambiarTodasLasClaves() {
   props().deleteProperty('CLAVES');
   crearEnlaces();
 }
 
-/* ---------- Ayudantes ---------- */
+/** Copia la hoja de datos a la carpeta "Respaldos". Se ejecuta sola cada domingo. */
+function respaldar() {
+  const p = props();
+  const privada = DriveApp.getFolderById(p.getProperty('CARPETA')).getParents().next();
+  let carpeta;
+  try { carpeta = DriveApp.getFolderById(p.getProperty('RESPALDOS')); } catch (x) { carpeta = null; }
+  if (!carpeta) {
+    carpeta = privada.createFolder('Respaldos');
+    p.setProperty('RESPALDOS', carpeta.getId());
+  }
+  const fecha = Utilities.formatDate(new Date(), ZONA, 'yyyy-MM-dd');
+  DriveApp.getFileById(p.getProperty('SS')).makeCopy('Respaldo ' + fecha, carpeta);
+  p.setProperty('ULTIMO_RESPALDO', new Date().toISOString());
+
+  // Guardar solo los últimos respaldos
+  const lista = [];
+  const it = carpeta.getFiles();
+  while (it.hasNext()) lista.push(it.next());
+  lista.sort(function (a, b) { return b.getDateCreated() - a.getDateCreated(); });
+  lista.slice(RESPALDOS_A_GUARDAR).forEach(function (f) { f.setTrashed(true); });
+
+  vaciarPapeleraVieja();
+}
+
+/* =========================================================
+   Ayudantes
+   ========================================================= */
 
 function usuario(k) {
   if (!k) return null;
@@ -104,13 +161,48 @@ function hoja(nombre) {
   return SpreadsheetApp.openById(props().getProperty('SS')).getSheetByName(nombre);
 }
 
-function filas(nombre) {
-  const v = hoja(nombre).getDataRange().getValues();
-  const cab = v.shift();
-  return v.map(function (r) {
-    const o = {};
-    cab.forEach(function (c, i) { o[c] = r[i] == null ? '' : String(r[i]); });
-    return o;
+/** Lee una hoja completa como lista de objetos según su encabezado. */
+function tabla(nombre) {
+  const h = hoja(nombre);
+  if (!h) return { h: null, cab: [], filas: [] };
+  const v = h.getDataRange().getValues();
+  const cab = v.shift().map(String);
+  return {
+    h: h, cab: cab,
+    filas: v.map(function (r, i) {
+      const o = { _fila: i + 2 };
+      cab.forEach(function (c, j) { o[c] = r[j] == null ? '' : String(r[j]); });
+      return o;
+    })
+  };
+}
+
+/** Escribe un objeto en la fila indicada (o al final si fila < 1), según el encabezado. */
+function escribir(t, fila, obj) {
+  const row = t.cab.map(function (c) { return obj[c] == null ? '' : String(obj[c]); });
+  if (fila > 0) t.h.getRange(fila, 1, 1, row.length).setValues([row]);
+  else t.h.appendRow(row);
+}
+
+function filaDe(nombre, id) {
+  const v = hoja(nombre).getRange('A:A').getValues();
+  for (let i = 1; i < v.length; i++) if (String(v[i][0]) === id) return i + 1;
+  return -1;
+}
+
+/** Borra las filas donde la columna llamada `campo` vale `valor`. Devuelve los objetos borrados. */
+function borrarDonde(nombre, campo, valor) {
+  const t = tabla(nombre);
+  const borradas = t.filas.filter(function (o) { return o[campo] === valor; });
+  borradas.slice().sort(function (a, b) { return b._fila - a._fila; })
+    .forEach(function (o) { t.h.deleteRow(o._fila); });
+  return borradas;
+}
+
+/** Manda a la papelera de Drive los archivos (se recuperan 30 días desde Drive). */
+function aPapeleraDrive(archivos) {
+  archivos.forEach(function (a) {
+    try { DriveApp.getFileById(a.driveId).setTrashed(true); } catch (x) {}
   });
 }
 
@@ -118,44 +210,81 @@ function json(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/** Número de fila (1 = encabezado) donde la columna A vale `id`, o -1. */
-function filaDe(nombre, id) {
-  const v = hoja(nombre).getRange('A:A').getValues();
-  for (let i = 1; i < v.length; i++) if (String(v[i][0]) === id) return i + 1;
-  return -1;
+function fechaCorta(iso) {
+  try { return Utilities.formatDate(new Date(iso), ZONA, 'dd/MM/yyyy'); } catch (x) { return ''; }
 }
 
-/** Borra todas las filas donde la columna `col` (1 = A) vale `valor`. Devuelve las filas borradas. */
-function borrarFilas(nombre, col, valor) {
-  const h = hoja(nombre);
-  const v = h.getDataRange().getValues();
-  const borradas = [];
-  for (let i = v.length - 1; i >= 1; i--) {
-    if (String(v[i][col - 1]) === valor) { borradas.push(v[i]); h.deleteRow(i + 1); }
+function dinero(n) { return '$' + (Number(n) || 0).toFixed(2); }
+
+function registrar(quien, texto) {
+  const h = hoja('Historial');
+  if (h) h.appendRow([new Date().toISOString(), quien, texto]);
+}
+
+/** Crea o actualiza el evento en el calendario compartido. Devuelve su id. */
+function sincronizarCalendario(ev) {
+  const cal = CalendarApp.getCalendarById(props().getProperty('CAL'));
+  const inicio = new Date(ev.inicio);
+  const fin = new Date(inicio.getTime() + (Number(ev.duracionMin) || 120) * 60000);
+  const desc = [ev.novedades, ev.siguientePaso ? 'Siguiente paso: ' + ev.siguientePaso : '']
+    .filter(String).join('\n\n') + '\n\nMás detalles en el Cuaderno familia.';
+  let ce = null;
+  try { ce = ev.calId ? cal.getEventById(ev.calId) : null; } catch (x) { ce = null; }
+  if (ce) {
+    ce.setTitle(ev.titulo);
+    ce.setTime(inicio, fin);
+    ce.setDescription(desc);
+    return ev.calId;
   }
-  return borradas;
+  ce = cal.createEvent(ev.titulo, inicio, fin, { description: desc });
+  ce.removeAllReminders();
+  ce.addPopupReminder(24 * 60);
+  ce.addPopupReminder(120);
+  return ce.getId();
 }
 
-/** Quita filas de Archivos y manda sus archivos a la papelera de Drive (se recuperan en 30 días). */
-function papelera(filasBorradas) {
-  filasBorradas.forEach(function (r) {
-    try { DriveApp.getFileById(String(r[4])).setTrashed(true); } catch (x) {}
+function quitarDelCalendario(calId) {
+  try { CalendarApp.getCalendarById(props().getProperty('CAL')).getEventById(calId).deleteEvent(); } catch (x) {}
+}
+
+/** Borra para siempre lo que lleva más de 30 días en la papelera. */
+function vaciarPapeleraVieja() {
+  const limite = Date.now() - DIAS_PAPELERA * 864e5;
+  tabla('Eventos').filas.forEach(function (e) {
+    if (e.borrado && new Date(e.borrado).getTime() < limite) {
+      borrarDonde('Eventos', 'id', e.id);
+      borrarDonde('Pagos', 'eventoId', e.id);
+      aPapeleraDrive(borrarDonde('Archivos', 'eventoId', e.id));
+      registrar('Sistema', 'Vació de la papelera «' + e.titulo + '» (' + fechaCorta(e.inicio) + ')');
+    }
   });
 }
 
-/* ---------- Lectura ---------- */
+/* =========================================================
+   Lectura
+   ========================================================= */
+
+function sinCampos(o, quitar) {
+  const r = {};
+  Object.keys(o).forEach(function (k) { if (k[0] !== '_' && quitar.indexOf(k) < 0) r[k] = o[k]; });
+  return r;
+}
 
 function doGet(e) {
   const q = (e && e.parameter) || {};
   const u = usuario(q.k);
   if (!u) return json({ error: 'Clave incorrecta' });
+  const p = props();
 
-  const pagos = filas('Pagos');
-  const archivos = filas('Archivos');
-  const visibles = {};
-  pagos.forEach(function (p) { if (u.admin || p.quienPago === u.nombre) visibles[p.id] = true; });
+  const eventos = tabla('Eventos').filas;
+  const activo = {};
+  eventos.forEach(function (x) { if (!x.borrado) activo[x.id] = true; });
+  const pagos = tabla('Pagos').filas.filter(function (x) { return activo[x.eventoId]; });
+  const archivos = tabla('Archivos').filas;
+  const visible = {};
+  pagos.forEach(function (x) { if (u.admin || x.quienPago === u.nombre) visible[x.id] = true; });
   // Los archivos de la sesión los ven todos; los comprobantes, solo quien pagó y los admin.
-  const puedeVer = function (a) { return u.admin || !a.pagoId || visibles[a.pagoId]; };
+  const puedeVer = function (a) { return u.admin || (activo[a.eventoId] && (!a.pagoId || visible[a.pagoId])); };
 
   if (q.accion === 'archivo') {
     const a = archivos.find(function (x) { return x.id === q.id; });
@@ -165,18 +294,31 @@ function doGet(e) {
   }
 
   const totales = {};
-  pagos.forEach(function (p) { totales[p.eventoId] = (totales[p.eventoId] || 0) + (Number(p.monto) || 0); });
+  pagos.forEach(function (x) { totales[x.eventoId] = (totales[x.eventoId] || 0) + (Number(x.monto) || 0); });
 
-  return json({
+  const res = {
     yo: u,
-    eventos: filas('Eventos').map(function (r) { delete r.calId; return r; }),
-    pagos: pagos.filter(function (p) { return visibles[p.id]; }),
-    archivos: archivos.filter(puedeVer).map(function (r) { delete r.driveId; return r; }),
+    ficha: JSON.parse(p.getProperty('FICHA') || '{}'),
+    eventos: eventos.filter(function (x) { return !x.borrado; })
+      .map(function (x) { return sinCampos(x, ['calId', 'borrado', 'borradoPor']); }),
+    pagos: pagos.filter(function (x) { return visible[x.id]; }).map(function (x) { return sinCampos(x, []); }),
+    archivos: archivos.filter(function (a) { return activo[a.eventoId] && puedeVer(a); })
+      .map(function (a) { return sinCampos(a, ['driveId']); }),
     totales: totales
-  });
+  };
+  if (u.admin) {
+    res.papelera = eventos.filter(function (x) { return x.borrado; }).map(function (x) {
+      return { id: x.id, tipo: x.tipo, titulo: x.titulo, inicio: x.inicio, borrado: x.borrado, borradoPor: x.borradoPor };
+    });
+    res.historial = tabla('Historial').filas.slice(-300).reverse().map(function (x) { return sinCampos(x, []); });
+    res.ultimoRespaldo = p.getProperty('ULTIMO_RESPALDO') || '';
+  }
+  return json(res);
 }
 
-/* ---------- Escritura ---------- */
+/* =========================================================
+   Escritura
+   ========================================================= */
 
 function doPost(e) {
   const lock = LockService.getScriptLock();
@@ -187,6 +329,9 @@ function doPost(e) {
     if (!u) return json({ error: 'Clave incorrecta' });
     if (d.accion === 'guardar') return json(guardar(d, u));
     if (d.accion === 'borrar') return json(borrar(d.id, u));
+    if (d.accion === 'restaurar') return json(restaurar(d.id, u));
+    if (d.accion === 'pendiente') return json(pendiente(d, u));
+    if (d.accion === 'ficha') return json(guardarFicha(d.ficha, u));
     return json({ error: 'Acción desconocida' });
   } catch (err) {
     return json({ error: String(err) });
@@ -198,100 +343,143 @@ function doPost(e) {
 function guardar(d, u) {
   const ev = d.evento;
   const ahora = new Date().toISOString();
-  const h = hoja('Eventos');
+  const tE = tabla('Eventos');
   const id = ev.id || Utilities.getUuid();
-  const fila = filaDe('Eventos', id);
-  const previa = fila > 0 ? h.getRange(fila, 1, 1, 10).getValues()[0].map(String) : null;
-  const creado = previa ? previa[8] : ahora;
-  const quien = previa ? previa[7] : u.nombre;
+  const previa = tE.filas.find(function (x) { return x.id === id; }) || null;
+  if (previa && previa.borrado) return { error: 'Ese registro está en la papelera. Un administrador puede restaurarlo.' };
 
-  // Calendario compartido: crea o actualiza el evento, con avisos 1 día y 2 horas antes.
-  const cal = CalendarApp.getCalendarById(props().getProperty('CAL'));
-  const inicio = new Date(ev.inicio);
-  const dur = Number(ev.duracionMin) || 120;
-  const fin = new Date(inicio.getTime() + dur * 60000);
-  const desc = [ev.novedades, ev.siguientePaso ? 'Siguiente paso: ' + ev.siguientePaso : '']
-    .filter(String).join('\n\n') + '\n\nMás detalles en el Cuaderno familia.';
-  let calId = previa ? previa[9] : '';
-  let ce = null;
-  try { ce = calId ? cal.getEventById(calId) : null; } catch (x) { ce = null; }
-  if (ce) {
-    ce.setTitle(ev.titulo);
-    ce.setTime(inicio, fin);
-    ce.setDescription(desc);
-  } else {
-    ce = cal.createEvent(ev.titulo, inicio, fin, { description: desc });
-    ce.removeAllReminders();
-    ce.addPopupReminder(24 * 60);
-    ce.addPopupReminder(120);
-    calId = ce.getId();
-  }
-
-  const row = [id, ev.tipo, ev.inicio, String(dur), ev.titulo, ev.novedades || '', ev.siguientePaso || '',
-    quien, creado, calId];
-  if (fila > 0) h.getRange(fila, 1, 1, row.length).setValues([row]);
-  else h.appendRow(row);
-
-  // ---- Pagos ----
-  // Un admin maneja todos los pagos de la sesión. Los demás, solo los suyos.
-  const hp = hoja('Pagos');
-  const existentes = filas('Pagos').filter(function (p) { return p.eventoId === id; });
-  const mios = {}, deOtros = {};
-  existentes.forEach(function (p) {
-    if (u.admin || p.quienPago === u.nombre) mios[p.id] = true; else deOtros[p.id] = true;
+  const sint = ev.sintomas && Object.keys(ev.sintomas).some(function (k) { return ev.sintomas[k]; });
+  const nuevo = Object.assign({}, previa || {}, {
+    id: id,
+    tipo: ev.tipo,
+    inicio: ev.inicio,
+    duracionMin: String(Number(ev.duracionMin) || 120),
+    titulo: ev.titulo,
+    novedades: ev.novedades || '',
+    siguientePaso: ev.siguientePaso || '',
+    quien: previa ? previa.quien : u.nombre,
+    creado: previa ? previa.creado : ahora,
+    sintomas: sint ? JSON.stringify(ev.sintomas) : '',
+    ciclo: ev.ciclo ? String(ev.ciclo) : ''
   });
-  const entrantes = (d.pagos || []).filter(function (p) { return !deOtros[p.id]; });
+  if (previa && previa.siguientePaso !== nuevo.siguientePaso) nuevo.pasoHecho = '';
+  nuevo.calId = sincronizarCalendario(nuevo);
+  escribir(tE, previa ? previa._fila : -1, nuevo);
+
+  const log = [(previa ? 'Editó' : 'Agregó') + ' «' + ev.titulo + '» (' + fechaCorta(ev.inicio) + ')'];
+
+  // ---- Pagos ---- Un admin maneja todos los de la sesión; los demás, solo los suyos.
+  const hp = hoja('Pagos');
+  const existentes = tabla('Pagos').filas.filter(function (x) { return x.eventoId === id; });
+  const mios = {}, deOtros = {}, porId = {};
+  existentes.forEach(function (x) {
+    porId[x.id] = x;
+    if (u.admin || x.quienPago === u.nombre) mios[x.id] = true; else deOtros[x.id] = true;
+  });
+  const entrantes = (d.pagos || []).filter(function (x) { return !deOtros[x.id]; });
   const vienen = {};
-  entrantes.forEach(function (p) { if (p.id) vienen[p.id] = true; });
+  entrantes.forEach(function (x) { if (x.id) vienen[x.id] = true; });
 
   Object.keys(mios).forEach(function (pid) {
     if (!vienen[pid]) {
-      borrarFilas('Pagos', 1, pid);
-      papelera(borrarFilas('Archivos', 7, pid));
+      const viejo = porId[pid];
+      borrarDonde('Pagos', 'id', pid);
+      aPapeleraDrive(borrarDonde('Archivos', 'pagoId', pid));
       delete mios[pid];
+      log.push('quitó un pago de ' + dinero(viejo.monto) + (viejo.quienPago ? ' (' + viejo.quienPago + ')' : ''));
     }
   });
-  entrantes.forEach(function (p) {
-    const pid = p.id || Utilities.getUuid();
-    const quienPago = u.admin ? (p.quienPago || '') : u.nombre;
-    const r = [pid, id, String(p.monto || ''), p.forma || '', p.detalle || '', quienPago, ahora];
-    const f = filaDe('Pagos', pid);
-    if (f > 0) hp.getRange(f, 1, 1, r.length).setValues([r]);
-    else hp.appendRow(r);
+  entrantes.forEach(function (x) {
+    const pid = x.id || Utilities.getUuid();
+    const quienPago = u.admin ? (x.quienPago || '') : u.nombre;
+    const r = [pid, id, String(x.monto || ''), x.forma || '', x.detalle || '', quienPago, ahora];
+    const viejo = porId[pid];
+    const f = viejo ? filaDe('Pagos', pid) : -1;
+    if (f > 0) {
+      hp.getRange(f, 1, 1, r.length).setValues([r]);
+      if (Number(viejo.monto) !== Number(x.monto) || viejo.quienPago !== quienPago || viejo.forma !== x.forma) {
+        log.push('cambió un pago de ' + dinero(viejo.monto) + ' (' + (viejo.quienPago || 'sin nombre') + ') a ' +
+          dinero(x.monto) + ' (' + (quienPago || 'sin nombre') + ', ' + (x.forma || '') + ')');
+      }
+    } else {
+      hp.appendRow(r);
+      log.push('agregó un pago de ' + dinero(x.monto) + (quienPago ? ' (' + quienPago + ', ' + (x.forma || '') + ')' : ''));
+    }
     mios[pid] = true;
   });
 
-  // ---- Archivos nuevos (en la carpeta privada de tu Drive) ----
+  // ---- Archivos nuevos ----
   const carpeta = DriveApp.getFolderById(props().getProperty('CARPETA'));
   const ha = hoja('Archivos');
+  let subidos = 0;
   (d.archivos || []).forEach(function (a) {
     if (a.pagoId && !mios[a.pagoId]) return; // comprobante de un pago ajeno: no se guarda
     const blob = Utilities.newBlob(Utilities.base64Decode(a.base64), a.tipo, a.nombre);
     const f = carpeta.createFile(blob);
     ha.appendRow([Utilities.getUuid(), id, a.nombre, a.tipo, f.getId(), ahora, a.pagoId || '']);
+    subidos++;
   });
+  if (subidos) log.push('subió ' + subidos + (subidos === 1 ? ' archivo' : ' archivos'));
 
-  // ---- Archivos que alguien quitó ----
-  // Un admin puede quitar cualquiera. Los demás, solo comprobantes de sus propios pagos.
+  // ---- Archivos que alguien quitó ---- (admin: cualquiera; los demás: comprobantes de sus pagos)
   if ((d.quitarArchivos || []).length) {
-    const todos = filas('Archivos');
+    const todos = tabla('Archivos').filas;
     d.quitarArchivos.forEach(function (aid) {
       const a = todos.find(function (x) { return x.id === aid; });
       if (!a) return;
-      if (u.admin || (a.pagoId && mios[a.pagoId])) papelera(borrarFilas('Archivos', 1, aid));
+      if (u.admin || (a.pagoId && mios[a.pagoId])) {
+        aPapeleraDrive(borrarDonde('Archivos', 'id', aid));
+        log.push('quitó el archivo «' + a.nombre + '»');
+      }
     });
   }
 
+  registrar(u.nombre, log.join('; '));
   return { ok: true, id: id };
 }
 
 function borrar(id, u) {
   if (!u.admin) return { error: 'Solo un administrador puede borrar registros completos.' };
-  const ev = borrarFilas('Eventos', 1, id)[0];
-  if (ev) {
-    try { CalendarApp.getCalendarById(props().getProperty('CAL')).getEventById(String(ev[9])).deleteEvent(); } catch (x) {}
-  }
-  borrarFilas('Pagos', 2, id);
-  papelera(borrarFilas('Archivos', 2, id));
+  const t = tabla('Eventos');
+  const ev = t.filas.find(function (x) { return x.id === id; });
+  if (!ev) return { ok: true };
+  quitarDelCalendario(ev.calId);
+  ev.calId = '';
+  ev.borrado = new Date().toISOString();
+  ev.borradoPor = u.nombre;
+  escribir(t, ev._fila, ev);
+  registrar(u.nombre, 'Mandó a la papelera «' + ev.titulo + '» (' + fechaCorta(ev.inicio) + ')');
+  return { ok: true };
+}
+
+function restaurar(id, u) {
+  if (!u.admin) return { error: 'Solo un administrador puede restaurar.' };
+  const t = tabla('Eventos');
+  const ev = t.filas.find(function (x) { return x.id === id; });
+  if (!ev) return { error: 'Ya no está en la papelera.' };
+  ev.borrado = '';
+  ev.borradoPor = '';
+  ev.calId = sincronizarCalendario(ev);
+  escribir(t, ev._fila, ev);
+  registrar(u.nombre, 'Restauró «' + ev.titulo + '» (' + fechaCorta(ev.inicio) + ')');
+  return { ok: true };
+}
+
+function pendiente(d, u) {
+  const t = tabla('Eventos');
+  const ev = t.filas.find(function (x) { return x.id === d.id && !x.borrado; });
+  if (!ev || !ev.siguientePaso) return { error: 'Ese pendiente ya no existe.' };
+  ev.pasoHecho = d.hecho ? new Date().toISOString() + '|' + u.nombre : '';
+  escribir(t, ev._fila, ev);
+  registrar(u.nombre, (d.hecho ? 'Marcó como hecho: «' : 'Desmarcó: «') + ev.siguientePaso + '»');
+  return { ok: true, pasoHecho: ev.pasoHecho };
+}
+
+function guardarFicha(f, u) {
+  if (!u.admin) return { error: 'Solo un administrador puede cambiar la ficha.' };
+  const limpia = {};
+  CAMPOS_FICHA.forEach(function (c) { limpia[c] = String((f || {})[c] || '').slice(0, 3000); });
+  props().setProperty('FICHA', JSON.stringify(limpia));
+  registrar(u.nombre, 'Actualizó la ficha rápida');
   return { ok: true };
 }

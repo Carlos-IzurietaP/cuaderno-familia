@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Marisol">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
-<script src="config.js?v=6"></script>
+<script src="config.js?v=7"></script>
 <style>
 :root{
   --bg:#f3f6f5; --card:#ffffff; --ink:#1d2b33; --muted:#5b6b72; --line:#d9e2e0;
@@ -109,6 +109,28 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
 .pg-item>div{min-width:0}
 .pg-item .num{white-space:nowrap}
 .pg-sel{min-height:48px;background:var(--card)}
+.menu{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.menu button{font:inherit;font-weight:700;font-size:.98rem;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:14px;padding:12px 14px;min-height:56px;cursor:pointer;text-align:left}
+.banner{background:var(--warm-soft);border-radius:10px;padding:10px 14px;font-size:.92rem}
+.sug{background:var(--accent-soft);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:6px 12px;flex-wrap:wrap}
+.pend{display:flex;flex-direction:column;gap:8px}
+label.pend-item{flex-direction:row;gap:12px;align-items:flex-start;font-weight:400;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer}
+.pend-item input{width:24px;height:24px;min-height:0;flex:none;margin:2px 0 0;padding:0;accent-color:var(--accent)}
+.sint{display:flex;gap:6px;flex-wrap:wrap}
+.sint span{font-size:.85rem;border-radius:999px;padding:2px 10px;background:var(--bg);border:1px solid var(--line)}
+.step.hecho{opacity:.75}
+.step.hecho b{text-decoration:line-through}
+.ficha dl{display:grid;grid-template-columns:minmax(110px,32%) 1fr;gap:10px 14px;margin:0}
+.ficha dt{color:var(--muted);font-size:.92rem}
+.ficha dd{margin:0;white-space:pre-line;min-width:0;overflow-wrap:anywhere}
+.ficha a{color:var(--accent);font-weight:700}
+@media (max-width:440px){.ficha dl{grid-template-columns:1fr;gap:2px}.ficha dd{margin-bottom:10px}}
+.hist{display:flex;flex-direction:column}
+.hist-item{padding:10px 0;border-bottom:1px dashed var(--line);display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere}
+.hist-item:last-child{border-bottom:0}
+.pap-item{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px dashed var(--line)}
+.pap-item:last-child{border-bottom:0}
+.cons{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--t);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
 .center{min-height:70vh;display:flex;flex-direction:column;justify-content:center;gap:16px}
 </style>
 </head>
@@ -130,11 +152,22 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
     <p class="sub">Lo que se ha hecho, en un solo lugar, para toda la familia.</p>
     <p class="small muted" id="yo"></p>
   </header>
+  <p class="banner" id="sin-red" hidden></p>
   <section class="next" id="proxima" hidden aria-label="Lo que viene"></section>
+  <nav class="menu" aria-label="Secciones">
+    <button id="m-ficha">Ficha rápida</button>
+    <button id="m-consulta">Modo consulta</button>
+    <button id="m-pagos">Pagos</button>
+    <button id="m-admin" hidden>Historial y papelera</button>
+  </nav>
+  <section class="list" id="s-pend" hidden aria-labelledby="h-pend">
+    <h2 id="h-pend">Pendientes</h2>
+    <div class="pend" id="l-pend"></div>
+  </section>
   <div class="stats" id="stats"></div>
-  <button class="link" id="b-desglose" style="align-self:flex-start;margin-top:-12px">Ver desglose de pagos →</button>
   <section class="list" aria-labelledby="h-prox" id="s-prox">
     <h2 id="h-prox">Lo que viene</h2>
+    <div class="list" id="l-sug"></div>
     <div class="list" id="l-prox"></div>
   </section>
   <section class="list" aria-labelledby="h-pas">
@@ -155,10 +188,84 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
   </section>
 </div>
 
+<!-- Ficha rápida -->
+<div class="wrap" id="v-ficha" hidden>
+  <header>
+    <button class="link volver">← Volver</button>
+    <h1>Ficha rápida</h1>
+    <p class="sub">Lo que siempre preguntan en el hospital o en una emergencia.</p>
+  </header>
+  <div class="sheet ficha" id="ficha-ver"></div>
+  <button class="btn ghost" id="b-ficha-editar" hidden>Editar ficha</button>
+  <div class="sheet" id="ficha-form" hidden>
+    <label for="fi-medicinas">Medicinas actuales<textarea id="fi-medicinas" placeholder="Nombre, dosis y horario de cada una"></textarea></label>
+    <label for="fi-alergias">Alergias<input id="fi-alergias" autocomplete="off" placeholder="Ej.: penicilina. Si no tiene, escribe «Ninguna conocida»"></label>
+    <div class="row">
+      <label for="fi-sangre">Tipo de sangre<input id="fi-sangre" autocomplete="off" placeholder="Ej.: O+"></label>
+      <label for="fi-historia">N.º de historia clínica<input id="fi-historia" autocomplete="off"></label>
+    </div>
+    <label for="fi-hospital">Hospital o clínica<input id="fi-hospital" autocomplete="off"></label>
+    <label for="fi-seguro">Seguro y número de póliza<input id="fi-seguro" autocomplete="off"></label>
+    <label for="fi-contactos">Doctores y teléfonos<textarea id="fi-contactos" placeholder="Dra. … (oncóloga): 099 123 4567"></textarea></label>
+    <label for="fi-otros">Otros datos importantes<textarea id="fi-otros"></textarea></label>
+    <fieldset>
+      <legend>Plan de tratamiento</legend>
+      <p class="small muted">Sirve para contar los ciclos («ciclo 5 de 12») y sugerir la próxima fecha.</p>
+      <div class="row">
+        <label for="fi-inmunoTotal">Inmunoterapias en total<input id="fi-inmunoTotal" type="number" min="0" inputmode="numeric"></label>
+        <label for="fi-inmunoCada">Cada cuántos días<input id="fi-inmunoCada" type="number" min="0" inputmode="numeric"></label>
+      </div>
+      <div class="row">
+        <label for="fi-quimioTotal">Sueros en total<input id="fi-quimioTotal" type="number" min="0" inputmode="numeric"></label>
+        <label for="fi-quimioCada">Cada cuántos días<input id="fi-quimioCada" type="number" min="0" inputmode="numeric"></label>
+      </div>
+    </fieldset>
+    <button class="btn" id="b-ficha-guardar">Guardar ficha</button>
+    <button class="btn ghost" id="b-ficha-cancelar">Cancelar</button>
+  </div>
+</div>
+
+<!-- Modo consulta -->
+<div class="wrap" id="v-consulta" hidden>
+  <header>
+    <button class="link volver">← Volver</button>
+    <h1>Modo consulta</h1>
+    <p class="sub">Un resumen limpio para mostrar en la cita médica.</p>
+  </header>
+  <div class="sheet">
+    <div class="row">
+      <label for="c-desde">Desde<input id="c-desde" type="date"></label>
+      <label for="c-hasta">Hasta<input id="c-hasta" type="date"></label>
+    </div>
+    <div class="filters" role="group" aria-label="Qué incluir" id="c-tipos"></div>
+  </div>
+  <div class="list" id="c-res"></div>
+  <a class="btn ghost" id="c-wa" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Enviar este resumen por WhatsApp</a>
+</div>
+
+<!-- Historial y papelera (solo administradores) -->
+<div class="wrap" id="v-admin" hidden>
+  <header>
+    <button class="link volver">← Volver</button>
+    <h1>Historial y papelera</h1>
+    <p class="sub" id="adm-resp"></p>
+  </header>
+  <section class="sheet">
+    <h2>Papelera</h2>
+    <p class="small muted">Lo que se borra se guarda aquí 30 días. Después se elimina para siempre.</p>
+    <div id="adm-pap"></div>
+  </section>
+  <section class="sheet">
+    <h2>Historial de cambios</h2>
+    <input id="adm-buscar" type="search" placeholder="Buscar: un nombre, un pago, una fecha…" aria-label="Buscar en el historial" autocomplete="off">
+    <div class="hist" id="adm-hist"></div>
+  </section>
+</div>
+
 <!-- Desglose de pagos -->
 <div class="wrap" id="v-pagos" hidden>
   <header>
-    <button class="link" id="b-volver">← Volver</button>
+    <button class="link volver">← Volver</button>
     <h1 id="pg-h">Pagos</h1>
     <p class="sub" id="pg-sub">Cuánto se ha pagado, quién pagó y cómo.</p>
   </header>
@@ -174,6 +281,7 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
     <button class="link" id="pg-limpiar" hidden style="align-self:flex-start">Quitar filtros</button>
   </div>
   <div class="stat" style="flex:none"><span class="small muted" id="pg-lbl">Total pagado</span><b id="pg-total"></b><span class="small muted" id="pg-n"></span></div>
+  <button class="btn ghost" id="pg-excel" hidden>Descargar estos pagos a Excel</button>
   <section class="sheet" id="pg-persona-s"><h2>Por persona</h2><div class="bars" id="pg-persona"></div></section>
   <section class="sheet" id="pg-tipo-s"><h2>Por tipo</h2><div class="bars" id="pg-tipo"></div></section>
   <section class="sheet" id="pg-forma-s"><h2>Por forma de pago</h2><div class="bars" id="pg-forma"></div></section>
@@ -198,6 +306,18 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
     <label for="f-titulo">Título<input id="f-titulo" placeholder="Ej.: Inmunoterapia, ciclo 3"></label>
     <label for="f-novedades">¿Cómo fue? ¿Hubo novedades?<textarea id="f-novedades" placeholder="Escríbelo como se lo contarías a tus hermanos. Si todavía no pasa, déjalo vacío."></textarea></label>
     <label for="f-paso">Siguiente paso (opcional)<input id="f-paso" placeholder="Ej.: Exámenes de sangre antes del próximo ciclo"></label>
+    <label for="f-ciclo" id="ciclo-l" hidden>Número de ciclo<input id="f-ciclo" type="number" min="1" inputmode="numeric"></label>
+
+    <fieldset>
+      <legend>¿Cómo se sintió después?</legend>
+      <p class="small muted">Opcional. 0 = nada, 5 = mucho.</p>
+      <div class="row">
+        <label for="s-nauseas">Náuseas<select id="s-nauseas" class="s-val"></select></label>
+        <label for="s-cansancio">Cansancio<select id="s-cansancio" class="s-val"></select></label>
+        <label for="s-dolor">Dolor<select id="s-dolor" class="s-val"></select></label>
+      </div>
+      <label for="s-otra">Otra molestia<input id="s-otra" autocomplete="off" placeholder="Ej.: llagas en la boca, fiebre, poco apetito…"></label>
+    </fieldset>
 
     <fieldset>
       <legend>Pagos</legend>
@@ -267,7 +387,7 @@ $('b-llave').addEventListener('click', () => {
 
 /* ---------- Pantallas ---------- */
 function mostrar(v) {
-  ['v-llave', 'v-inicio', 'v-editor', 'v-pagos'].forEach(id => $(id).hidden = id !== v);
+  ['v-llave', 'v-inicio', 'v-editor', 'v-pagos', 'v-ficha', 'v-consulta', 'v-admin'].forEach(id => $(id).hidden = id !== v);
   $('barra').hidden = v !== 'v-inicio';
   window.scrollTo(0, 0);
 }
@@ -292,6 +412,7 @@ async function api(params, cuerpo) {
   const j = await r.json();
   if (j.error === 'Clave incorrecta') {
     guardarLocal('clave', '');
+    try { localStorage.removeItem(CACHE_KEY); } catch (x) {}
     CLAVE = '';
     $('llave-error').hidden = false;
     mostrar('v-llave');
@@ -301,18 +422,48 @@ async function api(params, cuerpo) {
   return j;
 }
 
-async function cargar() {
-  mostrar('v-inicio');
-  $('l-prox').innerHTML = '<p class="empty">Cargando…</p>';
-  $('l-pas').innerHTML = '';
+// Lo último que se cargó queda guardado en el celular, para verlo aunque no haya señal.
+const CACHE_KEY = 'datos-cache';
+function leerCache() {
+  try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); return c && c.k === CLAVE ? c : null; }
+  catch (e) { return null; }
+}
+function guardarCache() {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ k: CLAVE, t: Date.now(), datos })); } catch (e) {}
+}
+function usarDatos(d) {
+  datos = d;
+  datos.totales = datos.totales || {};
+  datos.ficha = datos.ficha || {};
+  YO = datos.yo || { nombre: '', admin: true };
+}
+
+async function cargar(vista = 'v-inicio') {
+  mostrar(vista);
+  const c = leerCache();
+  if (c) { usarDatos(c.datos); pintarVista(vista); }
+  else { $('l-prox').innerHTML = '<p class="empty">Cargando…</p>'; $('l-pas').innerHTML = ''; }
   try {
-    datos = await api({ accion: 'listar' });
-    datos.totales = datos.totales || {};
-    YO = datos.yo || { nombre: '', admin: true };
-    pintar();
+    usarDatos(await api({ accion: 'listar' }));
+    guardarCache();
+    $('sin-red').hidden = true;
+    pintarVista(vista);
   } catch (e) {
-    if (e.message !== 'clave') $('l-prox').innerHTML = '<p class="empty">No se pudo cargar. Revisa tu internet y vuelve a abrir la app.</p>';
+    if (e.message === 'clave') return;
+    if (c) {
+      $('sin-red').hidden = false;
+      $('sin-red').textContent = 'Sin conexión: estás viendo lo guardado (' +
+        new Date(c.t).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) +
+        '). Para agregar cosas o abrir archivos necesitas internet.';
+    } else {
+      $('l-prox').innerHTML = '<p class="empty">No se pudo cargar. Revisa tu internet y vuelve a abrir la app.</p>';
+    }
   }
+}
+function pintarVista(vista) {
+  pintar();
+  if (vista === 'v-admin') pintarAdmin();
+  if (vista === 'v-ficha') pintarFicha();
 }
 
 /* ---------- Fechas ---------- */
@@ -424,11 +575,12 @@ function tarjeta(e) {
     </div>` : '';
   const archHtml = archs.length ? `<div class="files">${archs.map(botonArch).join('')}</div>` : '';
   return `<article class="entry" style="--t:var(--${esc(e.tipo)})">
-    <div class="top"><span class="tag">${esc(TIPOS[e.tipo] || e.tipo)}</span></div>
+    <div class="top"><span class="tag">${esc(etiqueta(e))}</span></div>
     <h3>${esc(e.titulo)}</h3>
     <p class="date">${lineasFecha(e.inicio)}</p>
     ${e.novedades ? `<p style="white-space:pre-line">${esc(e.novedades)}</p>` : ''}
-    ${e.siguientePaso ? `<p class="step"><b>Siguiente paso:</b> ${esc(e.siguientePaso)}</p>` : ''}
+    ${sintomasHtml(e)}
+    ${pasoHtml(e)}
     ${pagosHtml}${archHtml}
     <div class="foot"><span>${e.quien ? 'Escribió: ' + esc(e.quien) : ''}</span>
       <span class="links">
@@ -440,15 +592,126 @@ function tarjeta(e) {
 }
 
 function textoWhatsApp(e, total) {
-  let t = `*${TIPOS[e.tipo] || ''}: ${e.titulo}*\n${textoFecha(e.inicio, TZ)} (hora Ecuador)`;
+  let t = `*${etiqueta(e)}: ${e.titulo}*\n${textoFecha(e.inicio, TZ)} (hora Ecuador)`;
+  const sx = textoSintomas(e);
+  if (sx) t += `\n\nCómo se sintió: ${sx}`;
   if (e.novedades) t += `\n\n${e.novedades}`;
   if (e.siguientePaso) t += `\n\nSiguiente paso: ${e.siguientePaso}`;
   if (total) t += `\n\nPago: ${dinero(total)}`;
   return t;
 }
 
+/* ---------- Ciclos ---------- */
+let CICLOS = {};
+function calcularCiclos() {
+  CICLOS = {};
+  ['inmuno', 'quimio'].forEach(t => {
+    const total = Number(datos.ficha[t + 'Total']) || 0;
+    let n = 0;
+    datos.eventos.filter(e => e.tipo === t).sort((a, b) => a.inicio.localeCompare(b.inicio)).forEach(e => {
+      n = Number(e.ciclo) || n + 1;
+      CICLOS[e.id] = { n, total };
+    });
+  });
+}
+function etiqueta(e) {
+  const c = CICLOS[e.id];
+  return (TIPOS[e.tipo] || e.tipo) + (c ? ` · ciclo ${c.n}${c.total ? ' de ' + c.total : ''}` : '');
+}
+function sugerencias() {
+  const ahora = Date.now(), out = [];
+  ['inmuno', 'quimio'].forEach(t => {
+    const cada = Number(datos.ficha[t + 'Cada']) || 0;
+    if (!cada) return;
+    const lista = datos.eventos.filter(e => e.tipo === t).sort((a, b) => a.inicio.localeCompare(b.inicio));
+    if (!lista.length || lista.some(e => new Date(e.inicio).getTime() > ahora)) return;
+    const ult = lista[lista.length - 1];
+    const c = CICLOS[ult.id] || { n: 0, total: 0 };
+    if (c.total && c.n >= c.total) return;
+    const f = new Date(new Date(ult.inicio).getTime() + cada * 864e5).toLocaleDateString('en-CA', { timeZone: TZ });
+    out.push({ tipo: t, fecha: f, hora: ult.inicio.slice(11, 16), n: c.n + 1, total: c.total, cada });
+  });
+  return out;
+}
+function pintarSugerencias() {
+  const sug = sugerencias();
+  $('l-sug').innerHTML = sug.map((x, i) => `<div class="sug">
+      <div><b>Próxima ${esc(TIPOS[x.tipo].toLowerCase())} sugerida: ciclo ${x.n}${x.total ? ' de ' + x.total : ''}</b><br>
+      <span class="small">${esc(new Date(x.fecha + 'T12:00:00').toLocaleDateString('es-EC', { weekday: 'long', day: 'numeric', month: 'long' }))} · cada ${x.cada} días</span></div>
+      <button class="link" data-sug="${i}">Agendar</button>
+    </div>`).join('');
+  $('l-sug').querySelectorAll('[data-sug]').forEach(b => b.addEventListener('click', () => {
+    const x = sug[+b.dataset.sug];
+    abrirEditor(null, { tipo: x.tipo, fecha: x.fecha, hora: x.hora, titulo: `${TIPOS[x.tipo]} ciclo ${x.n}` });
+  }));
+}
+
+/* ---------- Síntomas ---------- */
+const SINTOMAS = { nauseas: 'Náuseas', cansancio: 'Cansancio', dolor: 'Dolor' };
+function leerSintomas(e) { try { return e.sintomas ? JSON.parse(e.sintomas) : {}; } catch (x) { return {}; } }
+function textoSintomas(e) {
+  const s = leerSintomas(e);
+  const partes = Object.keys(SINTOMAS).filter(k => s[k] !== undefined && s[k] !== '').map(k => `${SINTOMAS[k]} ${s[k]}/5`);
+  if (s.otra) partes.push(s.otra);
+  return partes.join(', ');
+}
+function sintomasHtml(e) {
+  const s = leerSintomas(e);
+  const chips = Object.keys(SINTOMAS).filter(k => s[k] !== undefined && s[k] !== '').map(k => `<span>${SINTOMAS[k]} ${esc(s[k])}/5</span>`);
+  if (s.otra) chips.push(`<span>${esc(s.otra)}</span>`);
+  return chips.length ? `<div class="sint" aria-label="Cómo se sintió">${chips.join('')}</div>` : '';
+}
+
+/* ---------- Pendientes ---------- */
+function pasoHtml(e) {
+  if (!e.siguientePaso) return '';
+  if (e.pasoHecho) {
+    const [cuando, quien] = e.pasoHecho.split('|');
+    const f = new Date(cuando).toLocaleDateString('es-EC', { day: 'numeric', month: 'short' });
+    return `<p class="step hecho">✓ <b>${esc(e.siguientePaso)}</b><br><span class="small">Hecho${quien ? ' por ' + esc(quien) : ''} el ${esc(f)} ·
+      <button class="link small" style="min-height:0;padding:0" data-pend-no="${esc(e.id)}">Deshacer</button></span></p>`;
+  }
+  return `<p class="step"><b>Siguiente paso:</b> ${esc(e.siguientePaso)}<br>
+    <button class="link small" style="min-height:0;padding:4px 0 0" data-pend-si="${esc(e.id)}">Marcar como hecho</button></p>`;
+}
+function pintarPendientes() {
+  const lista = datos.eventos.filter(e => e.siguientePaso && !e.pasoHecho).sort((a, b) => b.inicio.localeCompare(a.inicio));
+  $('s-pend').hidden = !lista.length;
+  $('l-pend').innerHTML = lista.map(e => `<label class="pend-item">
+      <input type="checkbox" data-pend-si="${esc(e.id)}" aria-label="Marcar como hecho">
+      <span><b>${esc(e.siguientePaso)}</b><br><span class="small muted">De: ${esc(e.titulo)} · ${esc(new Date(e.inicio).toLocaleDateString('es-EC', { timeZone: TZ, day: 'numeric', month: 'short' }))}</span></span>
+    </label>`).join('');
+}
+async function marcarPendiente(id, hecho) {
+  const e = datos.eventos.find(x => x.id === id);
+  if (!e) return;
+  const antes = e.pasoHecho;
+  e.pasoHecho = hecho ? new Date().toISOString() + '|' + YO.nombre : '';
+  pintar();
+  try {
+    const r = await api(null, { accion: 'pendiente', id, hecho });
+    e.pasoHecho = r.pasoHecho || e.pasoHecho;
+    guardarCache();
+    aviso(hecho ? 'Marcado como hecho' : 'Vuelve a estar pendiente');
+  } catch (err) {
+    e.pasoHecho = antes; pintar();
+    if (err.message !== 'clave') aviso(err instanceof TypeError ? 'Sin internet. No se pudo marcar.' : err.message);
+  }
+}
+document.addEventListener('click', ev => {
+  const si = ev.target.closest('[data-pend-si]');
+  if (si) { ev.preventDefault(); return marcarPendiente(si.dataset.pendSi, true); }
+  const no = ev.target.closest('[data-pend-no]');
+  if (no) { ev.preventDefault(); return marcarPendiente(no.dataset.pendNo, false); }
+});
+
 function pintar() {
+  calcularCiclos();
   pintarFiltros();
+  pintarPendientes();
+  pintarSugerencias();
+  $('m-admin').hidden = !YO.admin;
+  $('m-pagos').textContent = YO.admin ? 'Pagos' : 'Tus pagos';
   const ahora = Date.now();
   const prox = datos.eventos.filter(e => new Date(e.inicio).getTime() > ahora - 1 * 3600e3)
     .sort((a, b) => a.inicio.localeCompare(b.inicio));
@@ -468,7 +731,6 @@ function pintar() {
   }).reduce((s, p) => s + Number(p.monto || 0), 0);
   $('stats').innerHTML = `<div class="stat"><span class="small muted">${YO.admin ? 'Pagado este mes' : 'Tu aporte este mes'}</span><b>${dinero(delMes)}</b></div>
     <div class="stat"><span class="small muted">${YO.admin ? 'Pagado en total' : 'Tu aporte en total'}</span><b>${dinero(total)}</b></div>`;
-  $('b-desglose').textContent = YO.admin ? 'Ver desglose de pagos →' : 'Ver tus pagos →';
   $('yo').textContent = YO.nombre ? `Entraste como ${YO.nombre}${YO.admin ? ' (administrador)' : ''}` : '';
 
   $('l-prox').innerHTML = prox.length ? prox.map(tarjeta).join('')
@@ -499,6 +761,7 @@ function opciones(id, todos, valores, actual, nombre) {
     valores.map(v => `<option value="${esc(v)}" ${v === actual ? 'selected' : ''}>${esc(nombre ? nombre(v) : v)}</option>`).join('');
 }
 
+let pagosVistos = [];
 function pintarPagos() {
   const todos = datos.pagos;
   $('pg-h').textContent = YO.admin ? 'Pagos' : 'Tus pagos';
@@ -526,6 +789,8 @@ function pintarPagos() {
   $('pg-lbl').textContent = partes.length ? 'Pagado: ' + partes.join(' · ') : 'Pagado en total';
   $('pg-total').textContent = dinero(pagos.reduce((s, p) => s + Number(p.monto || 0), 0));
   $('pg-n').textContent = pagos.length === 1 ? '1 pago' : pagos.length + ' pagos';
+  pagosVistos = pagos;
+  $('pg-excel').hidden = !YO.admin || !pagos.length;
   $('pg-limpiar').hidden = !partes.length;
 
   // Cada desglose se esconde si ya se eligió esa misma cosa arriba
@@ -559,8 +824,8 @@ $('pg-persona-f').addEventListener('change', ev => { pgPersona = ev.target.value
 $('pg-tipo-f').addEventListener('change', ev => { pgTipo = ev.target.value; pintarPagos(); });
 $('pg-forma-f').addEventListener('change', ev => { pgForma = ev.target.value; pintarPagos(); });
 $('pg-limpiar').addEventListener('click', () => { pgMes = pgPersona = pgTipo = pgForma = ''; pintarPagos(); });
-$('b-desglose').addEventListener('click', () => { pintarPagos(); mostrar('v-pagos'); });
-$('b-volver').addEventListener('click', () => mostrar('v-inicio'));
+$('m-pagos').addEventListener('click', () => { pintarPagos(); mostrar('v-pagos'); });
+document.querySelectorAll('.volver').forEach(b => b.addEventListener('click', () => mostrar('v-inicio')));
 $('pg-mes').addEventListener('change', ev => { pgMes = ev.target.value; pintarPagos(); });
 
 /* ---------- Ver archivos ---------- */
@@ -656,16 +921,37 @@ $('f-archivos').addEventListener('change', ev => {
   pintarArchivosEditor();
 });
 
-function abrirEditor(e) {
+const opcionesSint = '<option value="">—</option>' + [0, 1, 2, 3, 4, 5].map(n => `<option>${n}</option>`).join('');
+document.querySelectorAll('.s-val').forEach(s => s.innerHTML = opcionesSint);
+function actualizarCiclo() {
+  const t = $('f-tipo').value;
+  const esCiclo = t === 'inmuno' || t === 'quimio';
+  $('ciclo-l').hidden = !esCiclo;
+  if (!esCiclo) return;
+  // Número automático: el siguiente al último registrado antes de esta fecha
+  const inicio = `${$('f-fecha').value}T${$('f-hora').value || '09:00'}`;
+  const previos = datos.eventos.filter(x => x.tipo === t && (!edicion || x.id !== edicion.id) && x.inicio.slice(0, 16) < inicio)
+    .sort((a, b) => a.inicio.localeCompare(b.inicio));
+  const ult = previos[previos.length - 1];
+  const auto = ult && CICLOS[ult.id] ? CICLOS[ult.id].n + 1 : 1;
+  $('f-ciclo').placeholder = `Automático: ${auto}`;
+}
+['f-tipo', 'f-fecha', 'f-hora'].forEach(id => $(id).addEventListener('change', actualizarCiclo));
+
+function abrirEditor(e, pre = {}) {
   edicion = e || null;
   formId = e ? e.id : nuevoId();
   nuevos = []; quitar = new Set();
   $('ed-titulo').textContent = e ? 'Editar' : 'Agregar';
-  $('f-tipo').value = e ? e.tipo : 'inmuno';
+  $('f-tipo').value = e ? e.tipo : (pre.tipo || 'inmuno');
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: TZ });
-  $('f-fecha').value = e ? e.inicio.slice(0, 10) : hoy;
-  $('f-hora').value = e ? e.inicio.slice(11, 16) : '09:00';
-  $('f-titulo').value = e ? e.titulo : '';
+  $('f-fecha').value = e ? e.inicio.slice(0, 10) : (pre.fecha || hoy);
+  $('f-hora').value = e ? e.inicio.slice(11, 16) : (pre.hora || '09:00');
+  $('f-titulo').value = e ? e.titulo : (pre.titulo || '');
+  $('f-ciclo').value = e && e.ciclo ? e.ciclo : '';
+  const sx = e ? leerSintomas(e) : {};
+  Object.keys(SINTOMAS).forEach(k => $('s-' + k).value = sx[k] ?? '');
+  $('s-otra').value = sx.otra || '';
   $('f-novedades').value = e ? e.novedades : '';
   $('f-paso').value = e ? e.siguientePaso : '';
   $('ed-yo').textContent = e ? (e.quien ? `Lo escribió ${e.quien}.` : '') : (YO.nombre ? `Se guardará como escrito por ${YO.nombre}.` : '');
@@ -673,6 +959,7 @@ function abrirEditor(e) {
   if (e) datos.pagos.filter(p => p.eventoId === e.id).forEach(filaPago);
   $('b-borrar').hidden = !e || !YO.admin;
   pintarArchivosEditor();
+  actualizarCiclo();
   mostrar('v-editor');
 }
 $('b-nuevo').addEventListener('click', () => abrirEditor(null));
@@ -765,6 +1052,13 @@ async function guardarForm(forzar) {
         titulo,
         novedades: $('f-novedades').value.trim(),
         siguientePaso: $('f-paso').value.trim(),
+        ciclo: $('ciclo-l').hidden ? '' : $('f-ciclo').value,
+        sintomas: (() => {
+          const sx = {};
+          Object.keys(SINTOMAS).forEach(k => { if ($('s-' + k).value !== '') sx[k] = $('s-' + k).value; });
+          if ($('s-otra').value.trim()) sx.otra = $('s-otra').value.trim();
+          return Object.keys(sx).length ? sx : null;
+        })(),
         quien
       },
       pagos,
@@ -785,14 +1079,164 @@ async function guardarForm(forzar) {
 $('b-borrar').addEventListener('click', () => {
   if (!edicion) return;
   capa(`<h3>¿Borrar «${esc(edicion.titulo)}»?</h3>
-    <p>Se borra para todos, junto con sus pagos y archivos. También sale del calendario.</p>
+    <p>Desaparece para todos, junto con sus pagos y archivos, y sale del calendario.</p>
+    <p class="small muted">Queda 30 días en la papelera. Un administrador puede recuperarlo desde «Historial y papelera».</p>
     <button class="btn danger" id="si-borrar">Sí, borrar</button>
     <button class="btn ghost" data-cerrar>No, volver</button>`);
   $('si-borrar').addEventListener('click', async () => {
     $('si-borrar').disabled = true;
-    try { await api(null, { accion: 'borrar', id: edicion.id }); cerrarCapa(); aviso('Borrado'); await cargar(); }
+    try { await api(null, { accion: 'borrar', id: edicion.id }); cerrarCapa(); aviso('Enviado a la papelera'); await cargar(); }
     catch (e) { cerrarCapa(); if (e.message !== 'clave') aviso('No se pudo borrar. Intenta otra vez.'); }
   });
+});
+
+/* ---------- Ficha rápida ---------- */
+const CAMPOS_FICHA = [
+  ['medicinas', 'Medicinas actuales'], ['alergias', 'Alergias'], ['sangre', 'Tipo de sangre'],
+  ['historia', 'N.º de historia clínica'], ['hospital', 'Hospital o clínica'], ['seguro', 'Seguro y póliza'],
+  ['contactos', 'Doctores y teléfonos'], ['otros', 'Otros datos']
+];
+const PLAN = ['inmunoTotal', 'inmunoCada', 'quimioTotal', 'quimioCada'];
+function conTelefonos(txt) {
+  return esc(txt).replace(/(\+?\d[\d \-]{5,}\d)/g, m => `<a href="tel:${m.replace(/[^\d+]/g, '')}">${m}</a>`);
+}
+function pintarFicha() {
+  const f = datos.ficha || {};
+  const filas = CAMPOS_FICHA.filter(([k]) => (f[k] || '').trim());
+  const plan = [];
+  if (f.inmunoTotal || f.inmunoCada) plan.push(`Inmunoterapia: ${f.inmunoTotal ? f.inmunoTotal + ' en total' : ''}${f.inmunoTotal && f.inmunoCada ? ', ' : ''}${f.inmunoCada ? 'cada ' + f.inmunoCada + ' días' : ''}`);
+  if (f.quimioTotal || f.quimioCada) plan.push(`Suero: ${f.quimioTotal ? f.quimioTotal + ' en total' : ''}${f.quimioTotal && f.quimioCada ? ', ' : ''}${f.quimioCada ? 'cada ' + f.quimioCada + ' días' : ''}`);
+  $('ficha-ver').innerHTML = (filas.length || plan.length)
+    ? `<dl>${filas.map(([k, n]) => `<dt>${n}</dt><dd>${k === 'contactos' || k === 'otros' ? conTelefonos(f[k]) : esc(f[k])}</dd>`).join('')}
+        ${plan.length ? `<dt>Plan</dt><dd>${esc(plan.join('\n'))}</dd>` : ''}</dl>`
+    : `<p class="muted">Todavía no hay datos. ${YO.admin ? 'Toca «Editar ficha» para llenarla.' : 'Un administrador de la familia puede llenarla.'}</p>`;
+  $('b-ficha-editar').hidden = !YO.admin;
+  $('ficha-form').hidden = true;
+  $('ficha-ver').hidden = false;
+}
+$('m-ficha').addEventListener('click', () => { pintarFicha(); mostrar('v-ficha'); });
+$('b-ficha-editar').addEventListener('click', () => {
+  const f = datos.ficha || {};
+  [...CAMPOS_FICHA.map(c => c[0]), ...PLAN].forEach(k => $('fi-' + k).value = f[k] || '');
+  $('ficha-form').hidden = false; $('ficha-ver').hidden = true; $('b-ficha-editar').hidden = true;
+});
+$('b-ficha-cancelar').addEventListener('click', pintarFicha);
+$('b-ficha-guardar').addEventListener('click', async () => {
+  const f = {};
+  [...CAMPOS_FICHA.map(c => c[0]), ...PLAN].forEach(k => f[k] = $('fi-' + k).value.trim());
+  const b = $('b-ficha-guardar'); b.disabled = true; b.textContent = 'Guardando…';
+  try {
+    await api(null, { accion: 'ficha', ficha: f });
+    datos.ficha = f; guardarCache(); pintarFicha(); pintar(); aviso('Ficha guardada');
+  } catch (e) {
+    if (e.message !== 'clave') aviso(e instanceof TypeError ? 'Sin internet. No se pudo guardar.' : e.message);
+  } finally { b.disabled = false; b.textContent = 'Guardar ficha'; }
+});
+
+/* ---------- Modo consulta ---------- */
+let consTipos = new Set(['inmuno', 'quimio', 'cita', 'examen']);
+function pintarConsulta() {
+  $('c-tipos').innerHTML = Object.entries(TIPOS).map(([k, n]) =>
+    `<button class="chip" data-ct="${k}" aria-pressed="${consTipos.has(k)}">${esc(n)}</button>`).join('');
+  const desde = $('c-desde').value || '0000', hasta = ($('c-hasta').value || '9999') + 'T99';
+  const lista = datos.eventos.filter(e => consTipos.has(e.tipo) && e.inicio >= desde && e.inicio <= hasta)
+    .sort((a, b) => b.inicio.localeCompare(a.inicio));
+  const f = datos.ficha || {};
+  const cabecera = (f.medicinas || f.alergias) ? `<div class="sheet ficha"><dl>
+      ${f.medicinas ? `<dt>Medicinas actuales</dt><dd>${esc(f.medicinas)}</dd>` : ''}
+      ${f.alergias ? `<dt>Alergias</dt><dd>${esc(f.alergias)}</dd>` : ''}</dl></div>` : '';
+  $('c-res').innerHTML = cabecera + (lista.length ? lista.map(e => {
+    const archs = datos.archivos.filter(a => a.eventoId === e.id && !a.pagoId);
+    return `<article class="cons" style="--t:var(--${esc(e.tipo)})">
+      <span class="tag">${esc(etiqueta(e))}</span>
+      <b>${esc(e.titulo)}</b>
+      <span class="small muted">${esc(new Date(e.inicio).toLocaleDateString('es-EC', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}</span>
+      ${e.novedades ? `<p style="white-space:pre-line">${esc(e.novedades)}</p>` : ''}
+      ${sintomasHtml(e)}
+      ${archs.length ? `<div class="files">${archs.map(a => `<button class="file" data-arch="${esc(a.id)}">${a.tipo === 'application/pdf' ? 'PDF' : 'Foto'} · ${esc(a.nombre)}</button>`).join('')}</div>` : ''}
+    </article>`;
+  }).join('') : '<p class="empty">No hay nada en esas fechas.</p>');
+  $('c-tipos').querySelectorAll('[data-ct]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.ct; consTipos.has(k) ? consTipos.delete(k) : consTipos.add(k); pintarConsulta();
+  }));
+  // Resumen para WhatsApp
+  let t = '*Resumen de salud de Marisol*';
+  if (f.medicinas) t += `\n\nMedicinas: ${f.medicinas}`;
+  if (f.alergias) t += `\nAlergias: ${f.alergias}`;
+  lista.slice().reverse().forEach(e => {
+    t += `\n\n• ${new Date(e.inicio).toLocaleDateString('es-EC', { timeZone: TZ, day: 'numeric', month: 'short', year: 'numeric' })} — ${etiqueta(e)}: ${e.titulo}`;
+    if (e.novedades) t += `\n${e.novedades}`;
+    const sx = textoSintomas(e); if (sx) t += `\nCómo se sintió: ${sx}`;
+  });
+  $('c-wa').href = 'https://wa.me/?text=' + encodeURIComponent(t);
+}
+$('m-consulta').addEventListener('click', () => {
+  if (!$('c-hasta').value) {
+    const hoy = new Date();
+    $('c-hasta').value = hoy.toLocaleDateString('en-CA', { timeZone: TZ });
+    $('c-desde').value = new Date(hoy.getTime() - 90 * 864e5).toLocaleDateString('en-CA', { timeZone: TZ });
+  }
+  pintarConsulta(); mostrar('v-consulta');
+});
+['c-desde', 'c-hasta'].forEach(id => $(id).addEventListener('change', pintarConsulta));
+
+/* ---------- Historial y papelera ---------- */
+function pintarAdmin() {
+  const r = datos.ultimoRespaldo;
+  $('adm-resp').textContent = r ? 'Respaldo automático cada domingo. Último: ' +
+    new Date(r).toLocaleDateString('es-EC', { weekday: 'long', day: 'numeric', month: 'long' }) + '.' : 'Respaldo automático cada domingo.';
+  const pap = datos.papelera || [];
+  $('adm-pap').innerHTML = pap.length ? pap.map(x => {
+    const quedan = Math.max(0, 30 - Math.floor((Date.now() - new Date(x.borrado).getTime()) / 864e5));
+    return `<div class="pap-item"><div><b>${esc(x.titulo)}</b><br><span class="small muted">${esc(TIPOS[x.tipo] || x.tipo)} del
+      ${esc(new Date(x.inicio).toLocaleDateString('es-EC', { timeZone: TZ, day: 'numeric', month: 'short', year: 'numeric' }))} · borró ${esc(x.borradoPor)} · quedan ${quedan} días</span></div>
+      <button class="link" data-rest="${esc(x.id)}">Restaurar</button></div>`;
+  }).join('') : '<p class="muted">La papelera está vacía.</p>';
+  $('adm-pap').querySelectorAll('[data-rest]').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try { await api(null, { accion: 'restaurar', id: b.dataset.rest }); aviso('Restaurado'); await cargar('v-admin'); }
+    catch (e) { b.disabled = false; if (e.message !== 'clave') aviso(e instanceof TypeError ? 'Sin internet.' : e.message); }
+  }));
+  pintarHistorial();
+}
+function pintarHistorial() {
+  const q = normal($('adm-buscar').value);
+  const h = (datos.historial || []).filter(x => !q || normal(x.quien + ' ' + x.accion + ' ' +
+    new Date(x.fecha).toLocaleDateString('es-EC', { day: 'numeric', month: 'long' })).includes(q));
+  $('adm-hist').innerHTML = h.length ? h.map(x => `<div class="hist-item">
+      <span class="small muted">${esc(new Date(x.fecha).toLocaleString('es-EC', { timeZone: TZ, day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }))} · <b>${esc(x.quien)}</b></span>
+      <span>${esc(x.accion)}</span></div>`).join('')
+    : `<p class="muted">${q ? 'No hay cambios con esa búsqueda.' : 'Todavía no hay cambios registrados.'}</p>`;
+}
+$('adm-buscar').addEventListener('input', pintarHistorial);
+$('m-admin').addEventListener('click', () => { pintarAdmin(); mostrar('v-admin'); cargar('v-admin'); });
+
+/* ---------- Descargar a Excel ---------- */
+function cargarScript(src) {
+  return new Promise((ok, mal) => {
+    if (window.XLSX) return ok();
+    const sc = document.createElement('script');
+    sc.src = src; sc.onload = ok; sc.onerror = mal;
+    document.head.appendChild(sc);
+  });
+}
+$('pg-excel').addEventListener('click', async () => {
+  const b = $('pg-excel'); b.disabled = true; b.textContent = 'Preparando…';
+  try {
+    await cargarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    const filas = [...pagosVistos].sort((x, y) => ((eventoDe(x) || {}).inicio || '').localeCompare((eventoDe(y) || {}).inicio || '')).map(p => {
+      const e = eventoDe(p) || {};
+      return { 'Fecha': e.inicio ? e.inicio.slice(0, 10) : '', 'Tipo': tipoDe(p), 'Sesión': e.titulo || '',
+        'Monto (USD)': Number(p.monto) || 0, 'Forma de pago': formaDe(p), 'Detalle': p.detalle || '', 'Quién pagó': personaDe(p) };
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws['!cols'] = [{ wch: 12 }, { wch: 15 }, { wch: 32 }, { wch: 12 }, { wch: 18 }, { wch: 28 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Pagos');
+    XLSX.writeFile(wb, 'pagos-' + new Date().toLocaleDateString('en-CA', { timeZone: TZ }) + '.xlsx');
+  } catch (e) {
+    aviso('No se pudo preparar el Excel. Revisa tu internet.');
+  } finally { b.disabled = false; b.textContent = 'Descargar estos pagos a Excel'; }
 });
 
 /* ---------- Arranque ---------- */
