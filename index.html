@@ -578,18 +578,18 @@ function filaPago(p = {}) {
   const d = document.createElement('div');
   d.className = 'payrow';
   d.innerHTML = `<div class="row">
-      <label>Monto (USD)<input class="p-monto" type="number" inputmode="decimal" step="0.01" min="0" value="${esc(p.monto || '')}"></label>
+      <label>Monto (USD)<input class="p-monto" autocomplete="off" type="number" inputmode="decimal" step="0.01" min="0" value="${esc(p.monto || '')}"></label>
       <label>¿Cómo se pagó?<select class="p-forma">${FORMAS.map(f => `<option ${f === p.forma ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
     </div>
     <div class="row">
-      <label>Detalle<input class="p-detalle" placeholder="Banco, número de comprobante…" value="${esc(p.detalle || '')}"></label>
+      <label>Detalle<input class="p-detalle" autocomplete="off" placeholder="Banco, número de comprobante…" value="${esc(p.detalle || '')}"></label>
       <label>¿Quién pagó?<select class="p-quien">
         <option value="">Elige</option>
         ${lista.map(n => `<option ${n === actual ? 'selected' : ''}>${esc(n)}</option>`).join('')}
         <option value="__otro" ${esOtro ? 'selected' : ''}>Otro</option>
       </select></label>
     </div>
-    <label class="p-otro-l" ${esOtro ? '' : 'hidden'}>Nombre de quien pagó<input class="p-otro" value="${esOtro ? esc(actual) : ''}" placeholder="Escribe el nombre"></label>
+    <label class="p-otro-l" ${esOtro ? '' : 'hidden'}>Nombre de quien pagó<input class="p-otro" autocomplete="off" value="${esOtro ? esc(actual) : ''}" placeholder="Escribe el nombre"></label>
     <button type="button" class="link p-quitar" style="align-self:flex-start;color:var(--danger)">Quitar este pago</button>`;
   d.querySelector('.p-quitar').addEventListener('click', () => d.remove());
   d.querySelector('.p-quien').addEventListener('change', ev => {
