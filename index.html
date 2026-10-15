@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Marisol">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
-<script src="config.js?v=3"></script>
+<script src="config.js?v=4"></script>
 <style>
 :root{
   --bg:#f3f6f5; --card:#ffffff; --ink:#1d2b33; --muted:#5b6b72; --line:#d9e2e0;
@@ -449,6 +449,10 @@ async function verArchivo(id) {
 $('f-tipo').innerHTML = Object.entries(TIPOS).map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('');
 
 function filaPago(p = {}) {
+  const lista = window.PAGADORES || [];
+  // Un pago nuevo sugiere a quien está escribiendo.
+  const actual = p.quienPago != null ? p.quienPago : $('f-quien').value;
+  const esOtro = !!actual && !lista.includes(actual);
   const d = document.createElement('div');
   d.className = 'payrow';
   d.innerHTML = `<div class="row">
@@ -457,10 +461,20 @@ function filaPago(p = {}) {
     </div>
     <div class="row">
       <label>Detalle<input class="p-detalle" placeholder="Banco, número de comprobante…" value="${esc(p.detalle || '')}"></label>
-      <label>¿Quién pagó?<input class="p-quien" value="${esc(p.quienPago || '')}"></label>
+      <label>¿Quién pagó?<select class="p-quien">
+        <option value="">Elige</option>
+        ${lista.map(n => `<option ${n === actual ? 'selected' : ''}>${esc(n)}</option>`).join('')}
+        <option value="__otro" ${esOtro ? 'selected' : ''}>Otro</option>
+      </select></label>
     </div>
-    <button type="button" class="link" style="align-self:flex-start;color:var(--danger)">Quitar este pago</button>`;
-  d.querySelector('button').addEventListener('click', () => d.remove());
+    <label class="p-otro-l" ${esOtro ? '' : 'hidden'}>Nombre de quien pagó<input class="p-otro" value="${esOtro ? esc(actual) : ''}" placeholder="Escribe el nombre"></label>
+    <button type="button" class="link p-quitar" style="align-self:flex-start;color:var(--danger)">Quitar este pago</button>`;
+  d.querySelector('.p-quitar').addEventListener('click', () => d.remove());
+  d.querySelector('.p-quien').addEventListener('change', ev => {
+    const otro = ev.target.value === '__otro';
+    d.querySelector('.p-otro-l').hidden = !otro;
+    if (otro) d.querySelector('.p-otro').focus();
+  });
   $('pagos').appendChild(d);
 }
 $('b-pago').addEventListener('click', () => filaPago());
@@ -538,7 +552,7 @@ $('b-guardar').addEventListener('click', async () => {
     monto: d.querySelector('.p-monto').value,
     forma: d.querySelector('.p-forma').value,
     detalle: d.querySelector('.p-detalle').value.trim(),
-    quienPago: d.querySelector('.p-quien').value.trim()
+    quienPago: d.querySelector('.p-quien').value === '__otro' ? d.querySelector('.p-otro').value.trim() : d.querySelector('.p-quien').value
   })).filter(p => p.monto || p.detalle);
 
   const b = $('b-guardar');
