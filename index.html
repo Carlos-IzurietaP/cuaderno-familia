@@ -94,6 +94,13 @@ legend{font-weight:700;padding:0 6px}
 .mes>summary .cuenta{margin-left:auto;font-family:var(--body);font-weight:400;font-size:.9rem;color:var(--muted)}
 .mes>.list{padding-top:4px}
 mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
+.bars{display:flex;flex-direction:column;gap:14px}
+.bar{display:flex;flex-direction:column;gap:6px}
+.bar .top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.bar .pct{color:var(--muted);font-weight:400;font-size:.9rem;margin-left:6px}
+.bar .track{height:10px;background:var(--accent-soft);border-radius:999px;overflow:hidden}
+.bar .fill{height:100%;background:var(--accent);border-radius:999px;min-width:2px}
+.pg-sel{min-height:48px;background:var(--card)}
 .center{min-height:70vh;display:flex;flex-direction:column;justify-content:center;gap:16px}
 </style>
 </head>
@@ -116,6 +123,7 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
   </header>
   <section class="next" id="proxima" hidden aria-label="Lo que viene"></section>
   <div class="stats" id="stats"></div>
+  <button class="link" id="b-desglose" style="align-self:flex-start;margin-top:-12px">Ver desglose de pagos →</button>
   <section class="list" aria-labelledby="h-prox" id="s-prox">
     <h2 id="h-prox">Lo que viene</h2>
     <div class="list" id="l-prox"></div>
@@ -136,6 +144,20 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
     </div>
     <div class="list" id="l-pas"></div>
   </section>
+</div>
+
+<!-- Desglose de pagos -->
+<div class="wrap" id="v-pagos" hidden>
+  <header>
+    <button class="link" id="b-volver">← Volver</button>
+    <h1>Pagos</h1>
+    <p class="sub">Cuánto se ha pagado, quién pagó y cómo.</p>
+  </header>
+  <select id="pg-mes" aria-label="Elegir mes" class="pg-sel"></select>
+  <div class="stat" style="flex:none"><span class="small muted" id="pg-lbl">Total pagado</span><b id="pg-total"></b><span class="small muted" id="pg-n"></span></div>
+  <section class="sheet"><h2>Por persona</h2><div class="bars" id="pg-persona"></div></section>
+  <section class="sheet"><h2>Por forma de pago</h2><div class="bars" id="pg-forma"></div></section>
+  <section class="sheet" id="pg-meses-s"><h2>Por mes</h2><div class="bars" id="pg-meses"></div></section>
 </div>
 
 <!-- Formulario -->
@@ -224,7 +246,7 @@ $('b-llave').addEventListener('click', () => {
 
 /* ---------- Pantallas ---------- */
 function mostrar(v) {
-  ['v-llave', 'v-inicio', 'v-editor'].forEach(id => $(id).hidden = id !== v);
+  ['v-llave', 'v-inicio', 'v-editor', 'v-pagos'].forEach(id => $(id).hidden = id !== v);
   $('barra').hidden = v !== 'v-inicio';
   window.scrollTo(0, 0);
 }
@@ -422,6 +444,47 @@ function pintar() {
     : '<p class="empty">No hay nada pendiente. Toca «Agregar» para poner la próxima sesión.</p>';
   pintarPasado();
 }
+
+/* ---------- Desglose de pagos ---------- */
+let pgMes = '';
+const mesDePago = (p) => { const e = datos.eventos.find(x => x.id === p.eventoId); return e ? e.inicio.slice(0, 7) : ''; };
+
+function barras(id, mapa) {
+  const filas = Object.entries(mapa).sort((a, b) => b[1] - a[1]);
+  const total = filas.reduce((s, f) => s + f[1], 0);
+  const max = filas.length ? filas[0][1] : 0;
+  $(id).innerHTML = filas.length ? filas.map(([n, v]) => `<div class="bar">
+      <div class="top"><span>${esc(n)}</span><span><span class="num">${dinero(v)}</span><span class="pct">${total ? Math.round(v / total * 100) : 0}%</span></span></div>
+      <div class="track"><div class="fill" style="width:${max ? v / max * 100 : 0}%"></div></div>
+    </div>`).join('') : '<p class="muted">No hay pagos aquí.</p>';
+}
+
+function pintarPagos() {
+  const meses = [...new Set(datos.pagos.map(mesDePago).filter(Boolean))].sort().reverse();
+  if (pgMes && !meses.includes(pgMes)) pgMes = '';
+  $('pg-mes').innerHTML = '<option value="">Todos los meses</option>' +
+    meses.map(m => `<option value="${m}" ${m === pgMes ? 'selected' : ''}>${esc(nombreMes(m))}</option>`).join('');
+  const pagos = datos.pagos.filter(p => !pgMes || mesDePago(p) === pgMes);
+  const suma = (fn) => pagos.reduce((m, p) => { const k = fn(p); m[k] = (m[k] || 0) + Number(p.monto || 0); return m; }, {});
+  $('pg-lbl').textContent = pgMes ? 'Pagado en ' + nombreMes(pgMes).toLowerCase() : 'Pagado en total';
+  $('pg-total').textContent = dinero(pagos.reduce((s, p) => s + Number(p.monto || 0), 0));
+  $('pg-n').textContent = pagos.length === 1 ? '1 pago' : pagos.length + ' pagos';
+  barras('pg-persona', suma(p => p.quienPago || 'Sin indicar'));
+  barras('pg-forma', suma(p => p.forma || 'Sin indicar'));
+  $('pg-meses-s').hidden = !!pgMes;
+  if (!pgMes) {
+    const porMes = suma(p => mesDePago(p) || 'Sin fecha');
+    // Por mes se ordena por fecha, no por monto
+    const max = Math.max(0, ...Object.values(porMes));
+    $('pg-meses').innerHTML = Object.keys(porMes).sort().reverse().map(m => `<div class="bar">
+        <div class="top"><span>${esc(m === 'Sin fecha' ? m : nombreMes(m))}</span><span class="num">${dinero(porMes[m])}</span></div>
+        <div class="track"><div class="fill" style="width:${max ? porMes[m] / max * 100 : 0}%"></div></div>
+      </div>`).join('') || '<p class="muted">No hay pagos aquí.</p>';
+  }
+}
+$('b-desglose').addEventListener('click', () => { pintarPagos(); mostrar('v-pagos'); });
+$('b-volver').addEventListener('click', () => mostrar('v-inicio'));
+$('pg-mes').addEventListener('change', ev => { pgMes = ev.target.value; pintarPagos(); });
 
 /* ---------- Ver archivos ---------- */
 function capa(html) {
