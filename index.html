@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Marisol">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
-<script src="config.js?v=8"></script>
+<script src="config.js?v=9"></script>
 <style>
 :root{
   --bg:#f3f6f5; --card:#ffffff; --ink:#1d2b33; --muted:#5b6b72; --line:#d9e2e0;
@@ -137,6 +137,8 @@ label.pend-item{flex-direction:row;gap:12px;align-items:flex-start;font-weight:4
 .msjs{display:flex;flex-direction:column;gap:12px}
 .msj{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere}
 .msj p{white-space:pre-line}
+.msj .para{font-size:.85rem;color:var(--accent);font-weight:700}
+#mama-para .pend-item{border:0;padding:4px 0;background:none}
 .msj img{max-width:100%;border-radius:10px;display:block}
 .msj .foto{min-height:60px;display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:10px;color:var(--muted);font-size:.9rem}
 #v-mama{font-size:1.12rem}
@@ -173,14 +175,24 @@ label.pend-item{flex-direction:row;gap:12px;align-items:flex-start;font-weight:4
     <h2 id="mama-mas-h">Después</h2>
     <div class="list" id="mama-mas"></div>
   </section>
+  <button class="btn ghost" id="mama-consulta">Para mostrar al doctor</button>
   <section class="list" aria-labelledby="mama-msj-h">
-    <h2 id="mama-msj-h">Mensajes de tu familia</h2>
+    <h2 id="mama-msj-h">Mensajes</h2>
+    <div class="filters" role="tablist" aria-label="Mensajes">
+      <button class="chip" role="tab" data-mt="sinleer" id="mt-sinleer">Sin leer</button>
+      <button class="chip" role="tab" data-mt="historial">Todos los mensajes</button>
+      <button class="chip" role="tab" data-mt="escribir">Escribir</button>
+    </div>
     <div class="msjs" id="mama-msjs"></div>
-  </section>
-  <section class="sheet" aria-labelledby="mama-esc-h">
-    <h2 id="mama-esc-h">Escríbeles algo</h2>
-    <label for="mama-texto" class="small muted" style="font-weight:400">Lo verán todos en la familia.<textarea id="mama-texto" placeholder="Gracias, hijos…"></textarea></label>
-    <button class="btn" id="mama-enviar">Enviar</button>
+    <div class="sheet" id="mama-escribir" hidden>
+      <fieldset>
+        <legend>¿A quién le escribes?</legend>
+        <label class="pend-item" style="border:0;padding:4px 0"><input type="checkbox" id="mama-todos"><span><b>A todos</b></span></label>
+        <div id="mama-para" class="pend"></div>
+      </fieldset>
+      <label for="mama-texto">Tu mensaje<textarea id="mama-texto" placeholder="Gracias, hijos…"></textarea></label>
+      <button class="btn" id="mama-enviar">Enviar</button>
+    </div>
   </section>
 </div>
 
@@ -775,6 +787,8 @@ function pintar() {
   pintarSugerencias();
   $('m-admin').hidden = !YO.admin;
   $('m-pagos').textContent = YO.admin ? 'Pagos' : 'Tus pagos';
+  const nm = nuevosDeMama();
+  $('m-mensajes').textContent = 'Mensajes para mamá' + (nm ? ` · ${nm} ${nm === 1 ? 'nuevo' : 'nuevos'} de ella` : '');
   const ahora = Date.now();
   const prox = datos.eventos.filter(e => new Date(e.inicio).getTime() > ahora - 1 * 3600e3)
     .sort((a, b) => a.inicio.localeCompare(b.inicio));
@@ -889,7 +903,7 @@ $('pg-tipo-f').addEventListener('change', ev => { pgTipo = ev.target.value; pint
 $('pg-forma-f').addEventListener('change', ev => { pgForma = ev.target.value; pintarPagos(); });
 $('pg-limpiar').addEventListener('click', () => { pgMes = pgPersona = pgTipo = pgForma = ''; pintarPagos(); });
 $('m-pagos').addEventListener('click', () => { pintarPagos(); mostrar('v-pagos'); });
-document.querySelectorAll('.volver').forEach(b => b.addEventListener('click', () => mostrar('v-inicio')));
+document.querySelectorAll('.volver').forEach(b => b.addEventListener('click', () => mostrar(YO.mama ? 'v-mama' : 'v-inicio')));
 $('pg-mes').addEventListener('change', ev => { pgMes = ev.target.value; pintarPagos(); });
 
 /* ---------- Ver archivos ---------- */
@@ -1351,6 +1365,7 @@ function mensajesHtml(lista, puedeBorrar) {
   if (!lista.length) return '<p class="empty">Todavía no hay mensajes.</p>';
   return lista.map(m => `<article class="msj">
       <span class="small muted"><b>${esc(m.quien)}</b> · ${esc(new Date(m.fecha).toLocaleString('es-EC', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }))}</span>
+      ${m.para && m.para.length ? `<span class="para">Para: ${esc(m.para.join(', '))}</span>` : ''}
       ${m.texto ? `<p>${esc(m.texto)}</p>` : ''}
       ${m.foto ? `<div class="foto" data-foto="${esc(m.id)}">Cargando foto…</div>` : ''}
       ${puedeBorrar(m) ? `<button class="link small" style="align-self:flex-start;color:var(--danger)" data-borrar-msj="${esc(m.id)}">Borrar mensaje</button>` : ''}
@@ -1369,7 +1384,12 @@ function cargarFotos(cont) {
     } catch (e) { div.textContent = 'No se pudo cargar la foto.'; }
   });
 }
+function nuevosDeMama() {
+  const visto = leerLocal('visto-msj') || '';
+  return (datos.mensajes || []).filter(m => m.para && m.para.length && m.quien !== YO.nombre && m.fecha > visto).length;
+}
 function pintarMensajes() {
+  guardarLocal('visto-msj', new Date().toISOString());
   $('msj-lista').innerHTML = mensajesHtml(datos.mensajes || [], m => YO.admin || m.quien === YO.nombre);
   cargarFotos($('msj-lista'));
 }
@@ -1394,7 +1414,7 @@ async function enviarMensaje(texto, foto, boton, alTerminar) {
 $('msj-enviar').addEventListener('click', () => enviarMensaje($('msj-texto').value, fotoMsj, $('msj-enviar'), () => {
   $('msj-texto').value = ''; fotoMsj = null; $('msj-foto-sel').innerHTML = '';
 }));
-$('m-mensajes').addEventListener('click', () => { pintarMensajes(); mostrar('v-mensajes'); });
+$('m-mensajes').addEventListener('click', () => { pintarMensajes(); mostrar('v-mensajes'); $('m-mensajes').textContent = 'Mensajes para mamá'; });
 document.addEventListener('click', ev => {
   const b = ev.target.closest('[data-borrar-msj]');
   if (!b) return;
@@ -1408,6 +1428,7 @@ document.addEventListener('click', ev => {
 
 /* ---------- Vista para mamá ---------- */
 function pintarMama() {
+  calcularCiclos();
   $('mama-hola').textContent = `Hola, ${YO.nombre}`;
   const ahora = Date.now();
   const vienen = (datos.eventos || []).filter(e => new Date(e.inicio).getTime() > ahora - 3600e3)
@@ -1424,10 +1445,72 @@ function pintarMama() {
   const mas = vienen.slice(1, 4);
   $('mama-mas-s').hidden = !mas.length;
   $('mama-mas').innerHTML = mas.map(e => `<div class="msj"><b>${esc(e.titulo)}</b><span>${fechaBonita(e)}</span><span class="small muted">${linea(e)}</span></div>`).join('');
-  $('mama-msjs').innerHTML = mensajesHtml(datos.mensajes || [], m => m.quien === YO.nombre);
+  pintarPestanaMama();
+}
+
+// Pestañas de mensajes de mamá: sin leer, todos, escribir
+let pestanaMama = null;
+let sinLeerVistos = null; // los que se mostraron como "sin leer" en esta visita
+const paraMama = (m) => !(m.para && m.para.length) && m.quien !== YO.nombre;
+function pintarPestanaMama() {
+  const todos = datos.mensajes || [];
+  const leido = datos.leido || '';
+  const sinLeer = todos.filter(m => paraMama(m) && m.fecha > leido);
+  if (!pestanaMama) pestanaMama = sinLeer.length ? 'sinleer' : 'historial';
+  $('mt-sinleer').textContent = sinLeer.length ? `Sin leer (${sinLeer.length})` : 'Sin leer';
+  document.querySelectorAll('[data-mt]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mt === pestanaMama));
+  $('mama-escribir').hidden = pestanaMama !== 'escribir';
+  $('mama-msjs').hidden = pestanaMama === 'escribir';
+  if (pestanaMama === 'sinleer') {
+    if (!sinLeerVistos) sinLeerVistos = sinLeer;
+    $('mama-msjs').innerHTML = sinLeerVistos.length ? mensajesHtml(sinLeerVistos, () => false)
+      : '<p class="empty">No tienes mensajes nuevos. Puedes ver los anteriores en «Todos los mensajes».</p>';
+    if (sinLeer.length) {
+      // Se marcan como leídos: la próxima vez estarán en «Todos los mensajes».
+      datos.leido = sinLeer[0].fecha;
+      guardarCache();
+      api(null, { accion: 'leido', hasta: datos.leido }).catch(() => {});
+      $('mt-sinleer').textContent = 'Sin leer';
+    }
+  } else if (pestanaMama === 'historial') {
+    $('mama-msjs').innerHTML = mensajesHtml(todos, m => m.quien === YO.nombre);
+  } else {
+    const personas = datos.personas || [];
+    if (!$('mama-para').children.length) {
+      $('mama-para').innerHTML = personas.map((n, i) => `<label class="pend-item"><input type="checkbox" class="mama-p" value="${esc(n)}" id="mp-${i}"><span>${esc(n)}</span></label>`).join('');
+    }
+  }
   cargarFotos($('mama-msjs'));
 }
-$('mama-enviar').addEventListener('click', () => enviarMensaje($('mama-texto').value, null, $('mama-enviar'), () => { $('mama-texto').value = ''; }));
+document.querySelectorAll('[data-mt]').forEach(b => b.addEventListener('click', () => {
+  if (pestanaMama === 'sinleer') sinLeerVistos = null;
+  pestanaMama = b.dataset.mt;
+  pintarPestanaMama();
+}));
+$('mama-todos').addEventListener('change', ev => document.querySelectorAll('.mama-p').forEach(c => c.checked = ev.target.checked));
+document.addEventListener('change', ev => {
+  if (!ev.target.classList || !ev.target.classList.contains('mama-p')) return;
+  const cs = [...document.querySelectorAll('.mama-p')];
+  $('mama-todos').checked = cs.every(c => c.checked);
+});
+$('mama-enviar').addEventListener('click', async () => {
+  const para = [...document.querySelectorAll('.mama-p')].filter(c => c.checked).map(c => c.value);
+  if (!para.length) { aviso('Elige a quién le quieres escribir.'); return; }
+  const texto = $('mama-texto').value;
+  if (!texto.trim()) { aviso('Escribe tu mensaje.'); return; }
+  const b = $('mama-enviar'); b.disabled = true; b.textContent = 'Enviando…';
+  try {
+    await api(null, { accion: 'mensaje', texto, para });
+    $('mama-texto').value = '';
+    document.querySelectorAll('.mama-p').forEach(c => c.checked = false); $('mama-todos').checked = false;
+    aviso('Mensaje enviado');
+    pestanaMama = 'historial';
+    await cargar('v-mama');
+  } catch (e) {
+    if (e.message !== 'clave') aviso(e instanceof TypeError ? 'Sin internet. No se pudo enviar.' : e.message);
+  } finally { b.disabled = false; b.textContent = 'Enviar'; }
+});
+$('mama-consulta').addEventListener('click', () => $('m-consulta').click());
 
 /* ---------- Arranque ---------- */
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

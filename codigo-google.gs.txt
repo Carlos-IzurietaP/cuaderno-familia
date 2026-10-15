@@ -46,7 +46,7 @@ const CORREOS = {
 const COLUMNAS = {
   Eventos: ['id', 'tipo', 'inicio', 'duracionMin', 'titulo', 'novedades', 'siguientePaso', 'quien', 'creado', 'calId',
     'borrado', 'borradoPor', 'sintomas', 'pasoHecho', 'ciclo', 'acompanan', 'acompananTexto'],
-  Mensajes: ['id', 'fecha', 'quien', 'texto', 'fotoId', 'fotoTipo'],
+  Mensajes: ['id', 'fecha', 'quien', 'texto', 'fotoId', 'fotoTipo', 'para'],
   Pagos: ['id', 'eventoId', 'monto', 'forma', 'detalle', 'quienPago', 'creado'],
   Archivos: ['id', 'eventoId', 'nombre', 'tipo', 'driveId', 'creado', 'pagoId'],
   Historial: ['fecha', 'quien', 'accion']
@@ -301,20 +301,40 @@ function doGet(e) {
     const blob = DriveApp.getFileById(m.fotoId).getBlob();
     return json({ tipo: m.fotoTipo, base64: Utilities.base64Encode(blob.getBytes()) });
   }
-  const mensajes = tabla('Mensajes').filas.slice(-100).reverse().map(function (m) {
-    return { id: m.id, fecha: m.fecha, quien: m.quien, texto: m.texto, foto: m.fotoId ? true : false };
+  // Mensajes para mamá los ve toda la familia. Los que escribe mamá, solo a quienes ella eligió.
+  const mensajes = tabla('Mensajes').filas.filter(function (m) {
+    return !m.para || m.quien === u.nombre || m.para.split('|').indexOf(u.nombre) >= 0;
+  }).slice(-200).reverse().map(function (m) {
+    return { id: m.id, fecha: m.fecha, quien: m.quien, texto: m.texto, foto: m.fotoId ? true : false,
+      para: m.para ? m.para.split('|') : [] };
   });
 
   const eventos = tabla('Eventos').filas;
 
   if (u.mama) {
-    // Vista tranquila: solo citas próximas y recientes, sin detalles médicos ni pagos.
-    const desde = Date.now() - 14 * 864e5;
+    // Vista tranquila: sin pagos, sin comprobantes y sin notas internas de la familia.
+    // Incluye lo necesario para el modo consulta (por si le toca ir sola al médico).
+    const activos = eventos.filter(function (x) { return !x.borrado && x.tipo !== 'nota'; });
+    const ids = {};
+    activos.forEach(function (x) { ids[x.id] = true; });
+    const archs = tabla('Archivos').filas.filter(function (a) { return ids[a.eventoId] && !a.pagoId; });
+    if (q.accion === 'archivo') {
+      const a = archs.find(function (x) { return x.id === q.id; });
+      if (!a) return json({ error: 'Ese archivo ya no existe' });
+      const blob = DriveApp.getFileById(a.driveId).getBlob();
+      return json({ nombre: a.nombre, tipo: a.tipo, base64: Utilities.base64Encode(blob.getBytes()) });
+    }
     return json({
       yo: u,
       mensajes: mensajes,
-      eventos: eventos.filter(function (x) { return !x.borrado && x.tipo !== 'nota' && new Date(x.inicio).getTime() > desde; })
-        .map(function (x) { return { id: x.id, tipo: x.tipo, inicio: x.inicio, titulo: x.titulo, acompanan: x.acompanan, acompananTexto: x.acompananTexto }; })
+      leido: p.getProperty('LEIDO_' + u.nombre) || '',
+      personas: USUARIOS.filter(function (x) { return x[0] !== u.nombre; }).map(function (x) { return x[0]; }),
+      ficha: JSON.parse(p.getProperty('FICHA') || '{}'),
+      eventos: activos.map(function (x) {
+        return { id: x.id, tipo: x.tipo, inicio: x.inicio, titulo: x.titulo, novedades: x.novedades, sintomas: x.sintomas,
+          ciclo: x.ciclo, acompanan: x.acompanan, acompananTexto: x.acompananTexto };
+      }),
+      archivos: archs.map(function (a) { return sinCampos(a, ['driveId']); })
     });
   }
 
@@ -371,6 +391,10 @@ function doPost(e) {
     if (!u) return json({ error: 'Clave incorrecta' });
     if (d.accion === 'mensaje') return json(nuevoMensaje(d, u));
     if (d.accion === 'borrarMensaje') return json(borrarMensaje(d.id, u));
+    if (d.accion === 'leido') {
+      props().setProperty('LEIDO_' + u.nombre, String(d.hasta || new Date().toISOString()));
+      return json({ ok: true });
+    }
     if (u.mama) return json({ error: 'Esta acción no está disponible.' });
     if (d.accion === 'acompanar') return json(acompanar(d, u));
     if (d.accion === 'guardar') return json(guardar(d, u));
@@ -569,9 +593,18 @@ function nuevoMensaje(d, u) {
     fotoId = DriveApp.getFolderById(props().getProperty('CARPETA')).createFile(blob).getId();
     fotoTipo = d.foto.tipo;
   }
+  // Mamá elige a quién le escribe; los demás le escriben a ella (sin "para").
+  let para = [];
+  if (u.mama) {
+    const validos = USUARIOS.map(function (x) { return x[0]; });
+    para = (Array.isArray(d.para) ? d.para : []).filter(function (n) { return validos.indexOf(n) >= 0 && n !== u.nombre; });
+    if (!para.length) return { error: 'Elige a quién le quieres escribir.' };
+  }
+  asegurarColumna('Mensajes', 'para');
   const id = Utilities.getUuid();
-  hoja('Mensajes').appendRow([id, new Date().toISOString(), u.nombre, texto, fotoId, fotoTipo]);
-  registrar(u.nombre, 'Dejó un mensaje para mamá' + (fotoId ? ' con foto' : ''));
+  const fila = { id: id, fecha: new Date().toISOString(), quien: u.nombre, texto: texto, fotoId: fotoId, fotoTipo: fotoTipo, para: para.join('|') };
+  escribir(tabla('Mensajes'), -1, fila);
+  registrar(u.nombre, u.mama ? 'Mamá escribió un mensaje para ' + para.join(', ') : 'Dejó un mensaje para mamá' + (fotoId ? ' con foto' : ''));
   return { ok: true, id: id };
 }
 
@@ -599,7 +632,7 @@ function resumenSemanal() {
   const pagos = tabla('Pagos').filas;
   const esMama = {};
   USUARIOS.forEach(function (x) { if (x[1] === 'mama') esMama[x[0]] = true; });
-  const mensajes = tabla('Mensajes').filas.filter(function (m) { return new Date(m.fecha).getTime() > hace7 && !esMama[m.quien]; });
+  const mensajes = tabla('Mensajes').filas.filter(function (m) { return new Date(m.fecha).getTime() > hace7 && !esMama[m.quien] && !m.para; });
   const tipos = { inmuno: 'Inmunoterapia', quimio: 'Suero', cita: 'Cita médica', examen: 'Examen', nota: 'Nota' };
   const esc = function (t) { return String(t || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
