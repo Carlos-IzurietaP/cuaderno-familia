@@ -83,6 +83,17 @@ legend{font-weight:700;padding:0 6px}
 .box{background:var(--card);color:var(--ink);border-radius:16px;padding:18px;max-width:560px;width:100%;max-height:90vh;overflow:auto;display:flex;flex-direction:column;gap:12px}
 .box img{max-width:100%;border-radius:8px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;z-index:30;max-width:90vw}
+.tools{display:flex;flex-direction:column;gap:10px}
+#f-mes{width:auto;flex:1 1 180px;min-height:44px;padding:8px 12px;border-radius:999px;background:var(--card)}
+.conteo{align-items:center;justify-content:space-between}
+.mes{display:flex;flex-direction:column;gap:12px}
+.mes>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 4px;border-bottom:1px solid var(--line);font-family:var(--display);font-weight:700;font-size:1.05rem;min-height:48px}
+.mes>summary::-webkit-details-marker{display:none}
+.mes>summary::after{content:"+";font-family:var(--body);font-size:1.4rem;color:var(--muted);line-height:1}
+.mes[open]>summary::after{content:"–"}
+.mes>summary .cuenta{margin-left:auto;font-family:var(--body);font-weight:400;font-size:.9rem;color:var(--muted)}
+.mes>.list{padding-top:4px}
+mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
 .center{min-height:70vh;display:flex;flex-direction:column;justify-content:center;gap:16px}
 </style>
 </head>
@@ -105,13 +116,24 @@ legend{font-weight:700;padding:0 6px}
   </header>
   <section class="next" id="proxima" hidden aria-label="Lo que viene"></section>
   <div class="stats" id="stats"></div>
-  <div class="filters" role="group" aria-label="Filtrar" id="filtros"></div>
   <section class="list" aria-labelledby="h-prox" id="s-prox">
     <h2 id="h-prox">Lo que viene</h2>
     <div class="list" id="l-prox"></div>
   </section>
   <section class="list" aria-labelledby="h-pas">
     <h2 id="h-pas">Lo que ya pasó</h2>
+    <div class="tools">
+      <input id="f-buscar" type="search" placeholder="Buscar: tomografía, inmuno, marcadores…" aria-label="Buscar en lo que ya pasó" autocomplete="off">
+      <div class="filters" role="group" aria-label="Filtrar por tipo" id="filtros"></div>
+      <div class="filters">
+        <select id="f-mes" aria-label="Filtrar por mes"></select>
+        <button class="chip" id="b-conarch" aria-pressed="false">Con archivos</button>
+      </div>
+      <div class="filters conteo">
+        <span class="small muted" id="conteo"></span>
+        <button class="link small" id="b-limpiar" hidden>Quitar filtros</button>
+      </div>
+    </div>
     <div class="list" id="l-pas"></div>
   </section>
 </div>
@@ -265,12 +287,79 @@ function lineasFecha(iso) {
 }
 
 /* ---------- Pintar la pantalla principal ---------- */
+let busqueda = '', mesFiltro = '', soloArchivos = false;
+const normal = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const nombreMes = (k) => {
+  const t = new Date(k + '-15T12:00:00').toLocaleDateString('es-EC', { month: 'long', year: 'numeric' });
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
+
 function pintarFiltros() {
   const ops = [['todo', 'Todo'], ...Object.entries(TIPOS)];
   $('filtros').innerHTML = ops.map(([k, n]) =>
     `<button class="chip" data-f="${k}" aria-pressed="${k === filtro}">${esc(n)}</button>`).join('');
-  $('filtros').querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.f; pintar(); }));
+  $('filtros').querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.f; pintarFiltros(); pintarPasado(); }));
 }
+
+// Todo el texto de un registro, para el buscador.
+function textoBuscable(e) {
+  const pagos = datos.pagos.filter(p => p.eventoId === e.id).map(p => [p.forma, p.detalle, p.quienPago].join(' '));
+  const archs = datos.archivos.filter(a => a.eventoId === e.id).map(a => a.nombre);
+  return normal([TIPOS[e.tipo], e.titulo, e.novedades, e.siguientePaso, e.quien, nombreMes(e.inicio.slice(0, 7)), ...pagos, ...archs].join(' '));
+}
+
+let pasados = [];
+function pintarPasado() {
+  // Meses disponibles en el selector
+  const meses = [...new Set(pasados.map(e => e.inicio.slice(0, 7)))].sort().reverse();
+  if (mesFiltro && !meses.includes(mesFiltro)) mesFiltro = '';
+  $('f-mes').innerHTML = '<option value="">Todos los meses</option>' +
+    meses.map(m => `<option value="${m}" ${m === mesFiltro ? 'selected' : ''}>${esc(nombreMes(m))}</option>`).join('');
+
+  const palabras = normal(busqueda).split(/\s+/).filter(Boolean);
+  const lista = pasados.filter(e =>
+    (filtro === 'todo' || e.tipo === filtro) &&
+    (!mesFiltro || e.inicio.slice(0, 7) === mesFiltro) &&
+    (!soloArchivos || datos.archivos.some(a => a.eventoId === e.id)) &&
+    (!palabras.length || (t => palabras.every(p => t.includes(p)))(textoBuscable(e))));
+
+  const hayFiltro = palabras.length || mesFiltro || soloArchivos || filtro !== 'todo';
+  $('b-conarch').setAttribute('aria-pressed', soloArchivos);
+  $('b-limpiar').hidden = !hayFiltro;
+  $('conteo').textContent = !pasados.length ? '' :
+    hayFiltro ? (lista.length === 1 ? '1 resultado' : `${lista.length} resultados`)
+              : (pasados.length === 1 ? '1 registro' : `${pasados.length} registros`);
+
+  if (!pasados.length) { $('l-pas').innerHTML = '<p class="empty">Todavía no hay nada aquí.</p>'; return; }
+  if (!lista.length) { $('l-pas').innerHTML = '<p class="empty">No se encontró nada con esos filtros. Prueba con otra palabra o toca «Quitar filtros».</p>'; return; }
+
+  // Agrupar por mes. Sin filtros, solo el mes más reciente se ve abierto.
+  const grupos = {};
+  lista.forEach(e => (grupos[e.inicio.slice(0, 7)] ||= []).push(e));
+  $('l-pas').innerHTML = Object.keys(grupos).sort().reverse().map((m, i) => {
+    const n = grupos[m].length;
+    return `<details class="mes" ${hayFiltro || i === 0 ? 'open' : ''}>
+      <summary>${esc(nombreMes(m))}<span class="cuenta">${n === 1 ? '1 registro' : n + ' registros'}</span></summary>
+      <div class="list">${grupos[m].map(tarjeta).join('')}</div>
+    </details>`;
+  }).join('');
+}
+
+$('f-buscar').addEventListener('input', ev => { busqueda = ev.target.value; pintarPasado(); });
+$('f-mes').addEventListener('change', ev => { mesFiltro = ev.target.value; pintarPasado(); });
+$('b-conarch').addEventListener('click', () => { soloArchivos = !soloArchivos; pintarPasado(); });
+$('b-limpiar').addEventListener('click', () => {
+  busqueda = ''; mesFiltro = ''; soloArchivos = false; filtro = 'todo';
+  $('f-buscar').value = '';
+  pintarFiltros(); pintarPasado();
+});
+// Botones dentro de las tarjetas (funcionan aunque la lista se vuelva a dibujar)
+document.addEventListener('click', ev => {
+  const ed = ev.target.closest('[data-editar]');
+  if (ed) return abrirEditor(datos.eventos.find(e => e.id === ed.dataset.editar));
+  const ar = ev.target.closest('[data-arch]');
+  if (ar) verArchivo(ar.dataset.arch);
+});
 
 function tarjeta(e) {
   const pagos = datos.pagos.filter(p => p.eventoId === e.id);
@@ -309,10 +398,9 @@ function textoWhatsApp(e, total) {
 function pintar() {
   pintarFiltros();
   const ahora = Date.now();
-  const lista = datos.eventos.filter(e => filtro === 'todo' || e.tipo === filtro);
-  const prox = lista.filter(e => new Date(e.inicio).getTime() > ahora - 1 * 3600e3)
+  const prox = datos.eventos.filter(e => new Date(e.inicio).getTime() > ahora - 1 * 3600e3)
     .sort((a, b) => a.inicio.localeCompare(b.inicio));
-  const pas = lista.filter(e => !prox.includes(e)).sort((a, b) => b.inicio.localeCompare(a.inicio));
+  pasados = datos.eventos.filter(e => !prox.includes(e)).sort((a, b) => b.inicio.localeCompare(a.inicio));
 
   const sig = datos.eventos.filter(e => e.tipo !== 'nota' && new Date(e.inicio).getTime() > ahora)
     .sort((a, b) => a.inicio.localeCompare(b.inicio))[0];
@@ -329,14 +417,9 @@ function pintar() {
   $('stats').innerHTML = `<div class="stat"><span class="small muted">Pagado este mes</span><b>${dinero(delMes)}</b></div>
     <div class="stat"><span class="small muted">Pagado en total</span><b>${dinero(total)}</b></div>`;
 
-  $('s-prox').hidden = !prox.length && filtro !== 'todo';
   $('l-prox').innerHTML = prox.length ? prox.map(tarjeta).join('')
     : '<p class="empty">No hay nada pendiente. Toca «Agregar» para poner la próxima sesión.</p>';
-  $('l-pas').innerHTML = pas.length ? pas.map(tarjeta).join('') : '<p class="empty">Todavía no hay nada aquí.</p>';
-
-  document.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () =>
-    abrirEditor(datos.eventos.find(e => e.id === b.dataset.editar))));
-  document.querySelectorAll('[data-arch]').forEach(b => b.addEventListener('click', () => verArchivo(b.dataset.arch)));
+  pintarPasado();
 }
 
 /* ---------- Ver archivos ---------- */
