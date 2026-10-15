@@ -19,6 +19,7 @@ const USUARIOS = [
   ['Carlos Alberto', true],
   ['Juan Xavier', true],
   ['Marisol', true],
+  ['Doménica', true],
   ['Mami Esperanza', false],
   ['GOPA', false],
   ['Tía Nena', false]
