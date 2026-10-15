@@ -362,6 +362,10 @@ label.pend-item{flex-direction:row;gap:12px;align-items:flex-start;font-weight:4
     <label for="f-titulo">Título<input id="f-titulo" placeholder="Ej.: Inmunoterapia, ciclo 3"></label>
     <label for="f-novedades">¿Cómo fue? ¿Hubo novedades?<textarea id="f-novedades" placeholder="Escríbelo como se lo contarías a tus hermanos. Si todavía no pasa, déjalo vacío."></textarea></label>
     <label for="f-paso">Siguiente paso (opcional)<input id="f-paso" placeholder="Ej.: Exámenes de sangre antes del próximo ciclo"></label>
+    <label for="f-acomp" id="acomp-l">Otros acompañantes (opcional)
+      <input id="f-acomp" autocomplete="off" placeholder="Ej.: GOPA">
+      <span class="small muted" style="font-weight:400">Para quien no usa la app. Los demás se anotan con el botón «Yo la acompaño».</span>
+    </label>
     <label for="f-ciclo" id="ciclo-l" hidden>Número de ciclo<input id="f-ciclo" type="number" min="1" inputmode="numeric"></label>
 
     <fieldset>
@@ -987,6 +991,7 @@ function actualizarCiclo() {
   const t = $('f-tipo').value;
   const esCiclo = t === 'inmuno' || t === 'quimio';
   $('ciclo-l').hidden = !esCiclo;
+  $('acomp-l').hidden = t === 'nota';
   if (!esCiclo) return;
   // Número automático: el siguiente al último registrado antes de esta fecha
   const inicio = `${$('f-fecha').value}T${$('f-hora').value || '09:00'}`;
@@ -1009,6 +1014,7 @@ function abrirEditor(e, pre = {}) {
   $('f-hora').value = e ? e.inicio.slice(11, 16) : (pre.hora || '09:00');
   $('f-titulo').value = e ? e.titulo : (pre.titulo || '');
   $('f-ciclo').value = e && e.ciclo ? e.ciclo : '';
+  $('f-acomp').value = e && e.acompananTexto ? e.acompananTexto : '';
   const sx = e ? leerSintomas(e) : {};
   Object.keys(SINTOMAS).forEach(k => $('s-' + k).value = sx[k] ?? '');
   $('s-otra').value = sx.otra || '';
@@ -1113,6 +1119,7 @@ async function guardarForm(forzar) {
         novedades: $('f-novedades').value.trim(),
         siguientePaso: $('f-paso').value.trim(),
         ciclo: $('ciclo-l').hidden ? '' : $('f-ciclo').value,
+        acompananTexto: $('f-acomp').value.trim(),
         sintomas: (() => {
           const sx = {};
           Object.keys(SINTOMAS).forEach(k => { if ($('s-' + k).value !== '') sx[k] = $('s-' + k).value; });
@@ -1300,13 +1307,14 @@ $('pg-excel').addEventListener('click', async () => {
 });
 
 /* ---------- Acompañantes ---------- */
-const acompanantes = (e) => (e.acompanan || '').split('|').filter(Boolean);
+const anotados = (e) => (e.acompanan || '').split('|').filter(Boolean);
+const acompanantes = (e) => [...anotados(e), ...(e.acompananTexto ? [e.acompananTexto] : [])];
 function acompHtml(e) {
   if (e.tipo === 'nota') return '';
   const lista = acompanantes(e);
   const viene = new Date(e.inicio).getTime() > Date.now() - 3600e3;
   if (!viene) return lista.length ? `<p class="small muted">La acompañó: ${esc(lista.join(', '))}</p>` : '';
-  const yo = lista.includes(YO.nombre);
+  const yo = anotados(e).includes(YO.nombre);
   return `<div class="acomp${lista.length ? '' : ' falta'}">
     <span>${lista.length ? `La acompaña: <b>${esc(lista.join(', '))}</b>` : 'Nadie se ha anotado para acompañarla'}</span>
     <button class="link" ${yo ? `data-acomp-no="${esc(e.id)}">Ya no puedo` : `data-acomp-si="${esc(e.id)}">Yo la acompaño`}</button>
@@ -1316,7 +1324,7 @@ async function marcarAcomp(id, si) {
   const e = datos.eventos.find(x => x.id === id);
   if (!e) return;
   const antes = e.acompanan;
-  const lista = acompanantes(e).filter(n => n !== YO.nombre);
+  const lista = anotados(e).filter(n => n !== YO.nombre);
   if (si) lista.push(YO.nombre);
   e.acompanan = lista.join('|');
   pintar();

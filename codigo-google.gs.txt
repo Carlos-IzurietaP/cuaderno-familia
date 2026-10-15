@@ -45,7 +45,7 @@ const CORREOS = {
 
 const COLUMNAS = {
   Eventos: ['id', 'tipo', 'inicio', 'duracionMin', 'titulo', 'novedades', 'siguientePaso', 'quien', 'creado', 'calId',
-    'borrado', 'borradoPor', 'sintomas', 'pasoHecho', 'ciclo', 'acompanan'],
+    'borrado', 'borradoPor', 'sintomas', 'pasoHecho', 'ciclo', 'acompanan', 'acompananTexto'],
   Mensajes: ['id', 'fecha', 'quien', 'texto', 'fotoId', 'fotoTipo'],
   Pagos: ['id', 'eventoId', 'monto', 'forma', 'detalle', 'quienPago', 'creado'],
   Archivos: ['id', 'eventoId', 'nombre', 'tipo', 'driveId', 'creado', 'pagoId'],
@@ -314,7 +314,7 @@ function doGet(e) {
       yo: u,
       mensajes: mensajes,
       eventos: eventos.filter(function (x) { return !x.borrado && x.tipo !== 'nota' && new Date(x.inicio).getTime() > desde; })
-        .map(function (x) { return { id: x.id, tipo: x.tipo, inicio: x.inicio, titulo: x.titulo, acompanan: x.acompanan }; })
+        .map(function (x) { return { id: x.id, tipo: x.tipo, inicio: x.inicio, titulo: x.titulo, acompanan: x.acompanan, acompananTexto: x.acompananTexto }; })
     });
   }
 
@@ -386,9 +386,17 @@ function doPost(e) {
   }
 }
 
+/** Agrega a la hoja una columna que falte (por si no se volvió a ejecutar "configurar"). */
+function asegurarColumna(nombre, col) {
+  const h = hoja(nombre);
+  const cab = h.getRange(1, 1, 1, Math.max(1, h.getLastColumn())).getValues()[0].map(String);
+  if (cab.indexOf(col) < 0) h.getRange(1, cab.length + 1).setValue(col);
+}
+
 function guardar(d, u) {
   const ev = d.evento;
   const ahora = new Date().toISOString();
+  asegurarColumna('Eventos', 'acompananTexto');
   const tE = tabla('Eventos');
   const id = ev.id || Utilities.getUuid();
   const previa = tE.filas.find(function (x) { return x.id === id; }) || null;
@@ -406,7 +414,8 @@ function guardar(d, u) {
     quien: previa ? previa.quien : u.nombre,
     creado: previa ? previa.creado : ahora,
     sintomas: sint ? JSON.stringify(ev.sintomas) : '',
-    ciclo: ev.ciclo ? String(ev.ciclo) : ''
+    ciclo: ev.ciclo ? String(ev.ciclo) : '',
+    acompananTexto: ev.acompananTexto != null ? String(ev.acompananTexto).slice(0, 200) : ((previa || {}).acompananTexto || '')
   });
   if (previa && previa.siguientePaso !== nuevo.siguientePaso) nuevo.pasoHecho = '';
   nuevo.calId = sincronizarCalendario(nuevo);
@@ -638,7 +647,7 @@ function resumenSemanal() {
 
     h += '<h3 style="margin:16px 0 6px">Lo que viene (próximas 2 semanas)</h3>';
     h += vienen.length ? '<ul style="padding-left:18px;margin:0">' + vienen.map(function (x) {
-      const ac = x.acompanan ? x.acompanan.split('|').join(', ') : '';
+      const ac = (x.acompanan ? x.acompanan.split('|') : []).concat(x.acompananTexto ? [x.acompananTexto] : []).join(', ');
       return '<li style="margin-bottom:8px"><b>' + esc(x.titulo) + '</b> — ' + esc(cuando(x.inicio)) + ' (hora Ecuador)<br>' +
         (ac ? 'La acompaña: ' + esc(ac) : '<span style="color:#b5652b"><b>Nadie se ha anotado para acompañarla.</b></span>') + '</li>';
     }).join('') + '</ul>' : '<p style="margin:0;color:#5b6b72">No hay nada agendado.</p>';
