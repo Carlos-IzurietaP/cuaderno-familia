@@ -310,7 +310,7 @@ function pintar() {
   pintarFiltros();
   const ahora = Date.now();
   const lista = datos.eventos.filter(e => filtro === 'todo' || e.tipo === filtro);
-  const prox = lista.filter(e => new Date(e.inicio).getTime() > ahora - 3 * 3600e3)
+  const prox = lista.filter(e => new Date(e.inicio).getTime() > ahora - 1 * 3600e3)
     .sort((a, b) => a.inicio.localeCompare(b.inicio));
   const pas = lista.filter(e => !prox.includes(e)).sort((a, b) => b.inicio.localeCompare(a.inicio));
 
