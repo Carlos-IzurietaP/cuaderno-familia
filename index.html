@@ -100,6 +100,11 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
 .bar .pct{color:var(--muted);font-weight:400;font-size:.9rem;margin-left:6px}
 .bar .track{height:10px;background:var(--accent-soft);border-radius:999px;overflow:hidden}
 .bar .fill{height:100%;background:var(--accent);border-radius:999px;min-width:2px}
+.pg-lista{display:flex;flex-direction:column}
+.pg-item{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px dashed var(--line)}
+.pg-item:last-child{border-bottom:0}
+.pg-item>div{min-width:0}
+.pg-item .num{white-space:nowrap}
 .pg-sel{min-height:48px;background:var(--card)}
 .center{min-height:70vh;display:flex;flex-direction:column;justify-content:center;gap:16px}
 </style>
@@ -153,11 +158,23 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
     <h1>Pagos</h1>
     <p class="sub">Cuánto se ha pagado, quién pagó y cómo.</p>
   </header>
-  <select id="pg-mes" aria-label="Elegir mes" class="pg-sel"></select>
+  <div class="sheet">
+    <div class="row">
+      <label for="pg-persona-f">Quién pagó<select id="pg-persona-f" class="pg-sel"></select></label>
+      <label for="pg-mes">Mes<select id="pg-mes" class="pg-sel"></select></label>
+    </div>
+    <div class="row">
+      <label for="pg-tipo-f">Para qué<select id="pg-tipo-f" class="pg-sel"></select></label>
+      <label for="pg-forma-f">Cómo se pagó<select id="pg-forma-f" class="pg-sel"></select></label>
+    </div>
+    <button class="link" id="pg-limpiar" hidden style="align-self:flex-start">Quitar filtros</button>
+  </div>
   <div class="stat" style="flex:none"><span class="small muted" id="pg-lbl">Total pagado</span><b id="pg-total"></b><span class="small muted" id="pg-n"></span></div>
-  <section class="sheet"><h2>Por persona</h2><div class="bars" id="pg-persona"></div></section>
-  <section class="sheet"><h2>Por forma de pago</h2><div class="bars" id="pg-forma"></div></section>
+  <section class="sheet" id="pg-persona-s"><h2>Por persona</h2><div class="bars" id="pg-persona"></div></section>
+  <section class="sheet" id="pg-tipo-s"><h2>Por tipo</h2><div class="bars" id="pg-tipo"></div></section>
+  <section class="sheet" id="pg-forma-s"><h2>Por forma de pago</h2><div class="bars" id="pg-forma"></div></section>
   <section class="sheet" id="pg-meses-s"><h2>Por mes</h2><div class="bars" id="pg-meses"></div></section>
+  <section class="sheet"><h2>Detalle de pagos</h2><div class="pg-lista" id="pg-lista"></div></section>
 </div>
 
 <!-- Formulario -->
@@ -446,8 +463,12 @@ function pintar() {
 }
 
 /* ---------- Desglose de pagos ---------- */
-let pgMes = '';
-const mesDePago = (p) => { const e = datos.eventos.find(x => x.id === p.eventoId); return e ? e.inicio.slice(0, 7) : ''; };
+let pgMes = '', pgPersona = '', pgTipo = '', pgForma = '';
+const eventoDe = (p) => datos.eventos.find(x => x.id === p.eventoId);
+const mesDePago = (p) => { const e = eventoDe(p); return e ? e.inicio.slice(0, 7) : ''; };
+const personaDe = (p) => p.quienPago || 'Sin indicar';
+const formaDe = (p) => p.forma || 'Sin indicar';
+const tipoDe = (p) => { const e = eventoDe(p); return e ? (TIPOS[e.tipo] || e.tipo) : 'Sin indicar'; };
 
 function barras(id, mapa) {
   const filas = Object.entries(mapa).sort((a, b) => b[1] - a[1]);
@@ -459,29 +480,67 @@ function barras(id, mapa) {
     </div>`).join('') : '<p class="muted">No hay pagos aquí.</p>';
 }
 
+function opciones(id, todos, valores, actual, nombre) {
+  $(id).innerHTML = `<option value="">${todos}</option>` +
+    valores.map(v => `<option value="${esc(v)}" ${v === actual ? 'selected' : ''}>${esc(nombre ? nombre(v) : v)}</option>`).join('');
+}
+
 function pintarPagos() {
-  const meses = [...new Set(datos.pagos.map(mesDePago).filter(Boolean))].sort().reverse();
-  if (pgMes && !meses.includes(pgMes)) pgMes = '';
-  $('pg-mes').innerHTML = '<option value="">Todos los meses</option>' +
-    meses.map(m => `<option value="${m}" ${m === pgMes ? 'selected' : ''}>${esc(nombreMes(m))}</option>`).join('');
-  const pagos = datos.pagos.filter(p => !pgMes || mesDePago(p) === pgMes);
+  const todos = datos.pagos;
+  const meses = [...new Set(todos.map(mesDePago).filter(Boolean))].sort().reverse();
+  const personas = [...new Set([...(window.PAGADORES || []), ...todos.map(personaDe)])];
+  const tipos = Object.values(TIPOS);
+  const formas = [...new Set([...FORMAS, ...todos.map(formaDe)])];
+  opciones('pg-persona-f', 'Todas', personas, pgPersona);
+  opciones('pg-mes', 'Todos', meses, pgMes, nombreMes);
+  opciones('pg-tipo-f', 'Todo', tipos, pgTipo);
+  opciones('pg-forma-f', 'Todas', formas, pgForma);
+
+  const pagos = todos.filter(p =>
+    (!pgPersona || personaDe(p) === pgPersona) &&
+    (!pgMes || mesDePago(p) === pgMes) &&
+    (!pgTipo || tipoDe(p) === pgTipo) &&
+    (!pgForma || formaDe(p) === pgForma));
   const suma = (fn) => pagos.reduce((m, p) => { const k = fn(p); m[k] = (m[k] || 0) + Number(p.monto || 0); return m; }, {});
-  $('pg-lbl').textContent = pgMes ? 'Pagado en ' + nombreMes(pgMes).toLowerCase() : 'Pagado en total';
+
+  // Frase que describe lo elegido, por ejemplo: "Mami Esperanza · Inmunoterapia · octubre de 2026"
+  const partes = [pgPersona, pgTipo, pgForma, pgMes && nombreMes(pgMes).toLowerCase()].filter(Boolean);
+  $('pg-lbl').textContent = partes.length ? 'Pagado: ' + partes.join(' · ') : 'Pagado en total';
   $('pg-total').textContent = dinero(pagos.reduce((s, p) => s + Number(p.monto || 0), 0));
   $('pg-n').textContent = pagos.length === 1 ? '1 pago' : pagos.length + ' pagos';
-  barras('pg-persona', suma(p => p.quienPago || 'Sin indicar'));
-  barras('pg-forma', suma(p => p.forma || 'Sin indicar'));
+  $('pg-limpiar').hidden = !partes.length;
+
+  // Cada desglose se esconde si ya se eligió esa misma cosa arriba
+  $('pg-persona-s').hidden = !!pgPersona; if (!pgPersona) barras('pg-persona', suma(personaDe));
+  $('pg-tipo-s').hidden = !!pgTipo;       if (!pgTipo) barras('pg-tipo', suma(tipoDe));
+  $('pg-forma-s').hidden = !!pgForma;     if (!pgForma) barras('pg-forma', suma(formaDe));
   $('pg-meses-s').hidden = !!pgMes;
+  if (!pagos.length) ['pg-persona-s', 'pg-tipo-s', 'pg-forma-s', 'pg-meses-s'].forEach(id => $(id).hidden = true);
   if (!pgMes) {
     const porMes = suma(p => mesDePago(p) || 'Sin fecha');
-    // Por mes se ordena por fecha, no por monto
     const max = Math.max(0, ...Object.values(porMes));
     $('pg-meses').innerHTML = Object.keys(porMes).sort().reverse().map(m => `<div class="bar">
         <div class="top"><span>${esc(m === 'Sin fecha' ? m : nombreMes(m))}</span><span class="num">${dinero(porMes[m])}</span></div>
         <div class="track"><div class="fill" style="width:${max ? porMes[m] / max * 100 : 0}%"></div></div>
       </div>`).join('') || '<p class="muted">No hay pagos aquí.</p>';
   }
+
+  // Lista de cada pago, del más reciente al más antiguo
+  const ordenados = [...pagos].sort((a, b) => ((eventoDe(b) || {}).inicio || '').localeCompare((eventoDe(a) || {}).inicio || ''));
+  $('pg-lista').innerHTML = ordenados.length ? ordenados.map(p => {
+    const e = eventoDe(p) || {};
+    const fecha = e.inicio ? new Date(e.inicio).toLocaleDateString('es-EC', { timeZone: TZ, day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    return `<div class="pg-item">
+      <div><b>${esc(e.titulo || 'Sin título')}</b><br>
+        <span class="small muted">${esc(fecha)} · ${esc(tipoDe(p))}<br>${esc(personaDe(p))} · ${esc(formaDe(p))}${p.detalle ? ' · ' + esc(p.detalle) : ''}</span></div>
+      <span class="num">${dinero(p.monto)}</span>
+    </div>`;
+  }).join('') : '<p class="muted">No hay pagos con esos filtros.</p>';
 }
+$('pg-persona-f').addEventListener('change', ev => { pgPersona = ev.target.value; pintarPagos(); });
+$('pg-tipo-f').addEventListener('change', ev => { pgTipo = ev.target.value; pintarPagos(); });
+$('pg-forma-f').addEventListener('change', ev => { pgForma = ev.target.value; pintarPagos(); });
+$('pg-limpiar').addEventListener('click', () => { pgMes = pgPersona = pgTipo = pgForma = ''; pintarPagos(); });
 $('b-desglose').addEventListener('click', () => { pintarPagos(); mostrar('v-pagos'); });
 $('b-volver').addEventListener('click', () => mostrar('v-inicio'));
 $('pg-mes').addEventListener('change', ev => { pgMes = ev.target.value; pintarPagos(); });
