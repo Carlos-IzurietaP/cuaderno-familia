@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Marisol">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
-<script src="config.js?v=2"></script>
+<script src="config.js?v=3"></script>
 <style>
 :root{
   --bg:#f3f6f5; --card:#ffffff; --ink:#1d2b33; --muted:#5b6b72; --line:#d9e2e0;
@@ -171,7 +171,8 @@ mark{background:var(--warm-soft);color:inherit;border-radius:3px;padding:0 1px}
       </label>
     </fieldset>
 
-    <label for="f-quien">¿Quién escribe?<input id="f-quien" placeholder="Tu nombre"></label>
+    <label for="f-quien">¿Quién escribe?<select id="f-quien"></select></label>
+    <p class="small" id="quien-error" hidden style="color:var(--danger)">Elige quién está escribiendo.</p>
     <button class="btn" id="b-guardar">Guardar</button>
     <button class="btn ghost" id="b-cancelar">Cancelar</button>
     <button class="btn danger" id="b-borrar" hidden>Borrar esto</button>
@@ -489,7 +490,11 @@ function abrirEditor(e) {
   $('f-titulo').value = e ? e.titulo : '';
   $('f-novedades').value = e ? e.novedades : '';
   $('f-paso').value = e ? e.siguientePaso : '';
-  $('f-quien').value = leerLocal('quien') || (e ? e.quien : '');
+  const personas = window.PERSONAS || [];
+  const elegido = personas.includes(leerLocal('quien')) ? leerLocal('quien') : '';
+  $('f-quien').innerHTML = '<option value="">Elige tu nombre</option>' +
+    personas.map(n => `<option ${n === elegido ? 'selected' : ''}>${esc(n)}</option>`).join('');
+  $('quien-error').hidden = true;
   $('pagos').innerHTML = '';
   if (e) datos.pagos.filter(p => p.eventoId === e.id).forEach(filaPago);
   $('b-borrar').hidden = !e;
@@ -526,6 +531,8 @@ $('b-guardar').addEventListener('click', async () => {
   const titulo = $('f-titulo').value.trim() || TIPOS[$('f-tipo').value];
   if (!$('f-fecha').value) { $('f-fecha').focus(); return; }
   const quien = $('f-quien').value.trim();
+  if (!quien) { $('quien-error').hidden = false; $('f-quien').focus(); return; }
+  $('quien-error').hidden = true;
   if (quien) guardarLocal('quien', quien);
   const pagos = [...document.querySelectorAll('.payrow')].map(d => ({
     monto: d.querySelector('.p-monto').value,
