@@ -547,7 +547,10 @@ function aviso(txt) {
 async function api(params, cuerpo) {
   let r;
   if (cuerpo) {
-    r = await fetch(API, { method: 'POST', body: JSON.stringify({ k: CLAVE, ...cuerpo }) });
+    // Tildes, ñ, «…» y emojis se envían como códigos simples, para que Google siempre los lea bien.
+    const cuerpoSeguro = JSON.stringify({ k: CLAVE, ...cuerpo })
+      .replace(/[\u007f-\uffff]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+    r = await fetch(API, { method: 'POST', body: cuerpoSeguro });
   } else {
     const u = new URL(API);
     u.searchParams.set('k', CLAVE);
