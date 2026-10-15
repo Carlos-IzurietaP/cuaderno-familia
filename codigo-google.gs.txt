@@ -1,7 +1,8 @@
 /**
  * Cuaderno familia — programa de Google que guarda todo en tu Drive.
- * Versión 3: un enlace por persona, respaldo semanal, historial, papelera,
- * ficha rápida, pendientes, síntomas y ciclos.
+ * Versión 4: un enlace por persona, respaldo semanal, historial, papelera,
+ * ficha rápida, pendientes, síntomas, ciclos, acompañantes, mensajes para mamá,
+ * vista para mamá y resumen semanal por correo.
  *
  * Para cambiar quién usa la app, edita la lista USUARIOS de abajo
  * y vuelve a ejecutar "crearEnlaces".
@@ -15,23 +16,37 @@ const DIAS_PAPELERA = 30;
 const RESPALDOS_A_GUARDAR = 8;
 
 // Quién usa la app.
-//   true  = administrador: ve y puede todo.
-//   false = ve toda la información médica, pero en pagos solo los suyos
-//           (y el total de cada sesión). No puede borrar registros completos.
+//   true   = administrador: ve y puede todo.
+//   false  = ve toda la información médica, pero en pagos solo los suyos
+//            (y el total de cada sesión). No puede borrar registros completos.
+//   'mama' = vista tranquila: su próxima cita, quién la acompaña y los mensajes
+//            de la familia. No ve pagos, síntomas ni detalles médicos.
 const USUARIOS = [
   ['Ariana', true],
   ['Carlos Alberto', true],
   ['Juan Xavier', true],
-  ['Marisol', true],
+  ['Marisol', 'mama'],
   ['Doménica', true],
   ['Mami Esperanza', false],
   ['GOPA', false],
   ['Tía Nena', false]
 ];
 
+// Correo de cada persona para el resumen de cada domingo. Si queda vacío, a esa persona no se le envía.
+const CORREOS = {
+  'Ariana': '',
+  'Carlos Alberto': '',
+  'Juan Xavier': '',
+  'Doménica': '',
+  'Mami Esperanza': '',
+  'GOPA': '',
+  'Tía Nena': ''
+};
+
 const COLUMNAS = {
   Eventos: ['id', 'tipo', 'inicio', 'duracionMin', 'titulo', 'novedades', 'siguientePaso', 'quien', 'creado', 'calId',
-    'borrado', 'borradoPor', 'sintomas', 'pasoHecho', 'ciclo'],
+    'borrado', 'borradoPor', 'sintomas', 'pasoHecho', 'ciclo', 'acompanan'],
+  Mensajes: ['id', 'fecha', 'quien', 'texto', 'fotoId', 'fotoTipo'],
   Pagos: ['id', 'eventoId', 'monto', 'forma', 'detalle', 'quienPago', 'creado'],
   Archivos: ['id', 'eventoId', 'nombre', 'tipo', 'driveId', 'creado', 'pagoId'],
   Historial: ['fecha', 'quien', 'accion']
@@ -86,13 +101,15 @@ function configurar() {
     });
   });
 
-  // Respaldo automático cada domingo de madrugada
+  // Respaldo cada domingo de madrugada y resumen por correo cada domingo en la mañana
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'respaldar') ScriptApp.deleteTrigger(t);
+    const f = t.getHandlerFunction();
+    if (f === 'respaldar' || f === 'resumenSemanal') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('respaldar').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).create();
+  ScriptApp.newTrigger('resumenSemanal').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(8).create();
   respaldar();
-  Logger.log('Listo. Respaldo semanal activado y primer respaldo hecho.');
+  Logger.log('Listo. Respaldo y resumen de cada domingo activados. Primer respaldo hecho.');
 }
 
 /**
@@ -110,7 +127,7 @@ function crearEnlaces() {
   p.deleteProperty('CLAVE');
   Logger.log('Enlaces (manda a cada persona SOLO el suyo):');
   USUARIOS.forEach(function (u) {
-    Logger.log(u[0] + (u[1] ? ' (admin)' : '') + ':  ' + DIRECCION_APP + '?k=' + claves[u[0]]);
+    Logger.log(u[0] + (u[1] === true ? ' (admin)' : u[1] === 'mama' ? ' (vista para mamá)' : '') + ':  ' + DIRECCION_APP + '?k=' + claves[u[0]]);
   });
 }
 
@@ -152,7 +169,9 @@ function usuario(k) {
   if (!k) return null;
   const claves = JSON.parse(props().getProperty('CLAVES') || '{}');
   for (let i = 0; i < USUARIOS.length; i++) {
-    if (claves[USUARIOS[i][0]] === k) return { nombre: USUARIOS[i][0], admin: USUARIOS[i][1] };
+    if (claves[USUARIOS[i][0]] === k) {
+      return { nombre: USUARIOS[i][0], admin: USUARIOS[i][1] === true, mama: USUARIOS[i][1] === 'mama' };
+    }
   }
   return null;
 }
@@ -276,7 +295,29 @@ function doGet(e) {
   if (!u) return json({ error: 'Clave incorrecta' });
   const p = props();
 
+  if (q.accion === 'foto') {
+    const m = tabla('Mensajes').filas.find(function (x) { return x.id === q.id && x.fotoId; });
+    if (!m) return json({ error: 'Esa foto ya no existe' });
+    const blob = DriveApp.getFileById(m.fotoId).getBlob();
+    return json({ tipo: m.fotoTipo, base64: Utilities.base64Encode(blob.getBytes()) });
+  }
+  const mensajes = tabla('Mensajes').filas.slice(-100).reverse().map(function (m) {
+    return { id: m.id, fecha: m.fecha, quien: m.quien, texto: m.texto, foto: m.fotoId ? true : false };
+  });
+
   const eventos = tabla('Eventos').filas;
+
+  if (u.mama) {
+    // Vista tranquila: solo citas próximas y recientes, sin detalles médicos ni pagos.
+    const desde = Date.now() - 14 * 864e5;
+    return json({
+      yo: u,
+      mensajes: mensajes,
+      eventos: eventos.filter(function (x) { return !x.borrado && x.tipo !== 'nota' && new Date(x.inicio).getTime() > desde; })
+        .map(function (x) { return { id: x.id, tipo: x.tipo, inicio: x.inicio, titulo: x.titulo, acompanan: x.acompanan }; })
+    });
+  }
+
   const activo = {};
   eventos.forEach(function (x) { if (!x.borrado) activo[x.id] = true; });
   const pagos = tabla('Pagos').filas.filter(function (x) { return activo[x.eventoId]; });
@@ -304,7 +345,8 @@ function doGet(e) {
     pagos: pagos.filter(function (x) { return visible[x.id]; }).map(function (x) { return sinCampos(x, []); }),
     archivos: archivos.filter(function (a) { return activo[a.eventoId] && puedeVer(a); })
       .map(function (a) { return sinCampos(a, ['driveId']); }),
-    totales: totales
+    totales: totales,
+    mensajes: mensajes
   };
   if (u.admin) {
     res.papelera = eventos.filter(function (x) { return x.borrado; }).map(function (x) {
@@ -327,6 +369,10 @@ function doPost(e) {
     const d = JSON.parse(e.postData.contents);
     const u = usuario(d.k);
     if (!u) return json({ error: 'Clave incorrecta' });
+    if (d.accion === 'mensaje') return json(nuevoMensaje(d, u));
+    if (d.accion === 'borrarMensaje') return json(borrarMensaje(d.id, u));
+    if (u.mama) return json({ error: 'Esta acción no está disponible.' });
+    if (d.accion === 'acompanar') return json(acompanar(d, u));
     if (d.accion === 'guardar') return json(guardar(d, u));
     if (d.accion === 'borrar') return json(borrar(d.id, u));
     if (d.accion === 'restaurar') return json(restaurar(d.id, u));
@@ -482,4 +528,139 @@ function guardarFicha(f, u) {
   props().setProperty('FICHA', JSON.stringify(limpia));
   registrar(u.nombre, 'Actualizó la ficha rápida');
   return { ok: true };
+}
+
+/* =========================================================
+   Acompañantes
+   ========================================================= */
+
+function acompanar(d, u) {
+  const t = tabla('Eventos');
+  const ev = t.filas.find(function (x) { return x.id === d.id && !x.borrado; });
+  if (!ev) return { error: 'Esa sesión ya no existe.' };
+  let lista = ev.acompanan ? ev.acompanan.split('|') : [];
+  lista = lista.filter(function (n) { return n !== u.nombre; });
+  if (d.si) lista.push(u.nombre);
+  ev.acompanan = lista.join('|');
+  escribir(t, ev._fila, ev);
+  registrar(u.nombre, (d.si ? 'Se anotó para acompañar' : 'Ya no acompaña') + ' en «' + ev.titulo + '» (' + fechaCorta(ev.inicio) + ')');
+  return { ok: true, acompanan: ev.acompanan };
+}
+
+/* =========================================================
+   Mensajes para mamá
+   ========================================================= */
+
+function nuevoMensaje(d, u) {
+  const texto = String(d.texto || '').trim().slice(0, 2000);
+  if (!texto && !d.foto) return { error: 'Escribe un mensaje o elige una foto.' };
+  let fotoId = '', fotoTipo = '';
+  if (d.foto && d.foto.base64) {
+    const blob = Utilities.newBlob(Utilities.base64Decode(d.foto.base64), d.foto.tipo, d.foto.nombre || 'foto.jpg');
+    fotoId = DriveApp.getFolderById(props().getProperty('CARPETA')).createFile(blob).getId();
+    fotoTipo = d.foto.tipo;
+  }
+  const id = Utilities.getUuid();
+  hoja('Mensajes').appendRow([id, new Date().toISOString(), u.nombre, texto, fotoId, fotoTipo]);
+  registrar(u.nombre, 'Dejó un mensaje para mamá' + (fotoId ? ' con foto' : ''));
+  return { ok: true, id: id };
+}
+
+function borrarMensaje(id, u) {
+  const m = tabla('Mensajes').filas.find(function (x) { return x.id === id; });
+  if (!m) return { ok: true };
+  if (!u.admin && m.quien !== u.nombre) return { error: 'Solo puedes borrar tus propios mensajes.' };
+  borrarDonde('Mensajes', 'id', id);
+  if (m.fotoId) aPapeleraDrive([{ driveId: m.fotoId }]);
+  registrar(u.nombre, 'Borró un mensaje de ' + m.quien);
+  return { ok: true };
+}
+
+/* =========================================================
+   Resumen de cada domingo por correo
+   ========================================================= */
+
+/** Para probar: ejecútala y te llega ahora mismo a los correos configurados. */
+function enviarResumenAhora() { resumenSemanal(); }
+
+function resumenSemanal() {
+  const ahora = Date.now(), hace7 = ahora - 7 * 864e5, en14 = ahora + 14 * 864e5;
+  const ficha = JSON.parse(props().getProperty('FICHA') || '{}');
+  const eventos = tabla('Eventos').filas.filter(function (x) { return !x.borrado; });
+  const pagos = tabla('Pagos').filas;
+  const esMama = {};
+  USUARIOS.forEach(function (x) { if (x[1] === 'mama') esMama[x[0]] = true; });
+  const mensajes = tabla('Mensajes').filas.filter(function (m) { return new Date(m.fecha).getTime() > hace7 && !esMama[m.quien]; });
+  const tipos = { inmuno: 'Inmunoterapia', quimio: 'Suero', cita: 'Cita médica', examen: 'Examen', nota: 'Nota' };
+  const esc = function (t) { return String(t || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const cuando = function (iso) {
+    const d = new Date(iso);
+    const n = function (f) { return Number(Utilities.formatDate(d, ZONA, f)); };
+    return DIAS[n('u') % 7] + ' ' + n('d') + ' de ' + MESES[n('M') - 1] + ', ' + Utilities.formatDate(d, ZONA, 'HH:mm');
+  };
+  const t = function (iso) { return new Date(iso).getTime(); };
+
+  const pasaron = eventos.filter(function (x) { return t(x.inicio) >= hace7 && t(x.inicio) <= ahora; })
+    .sort(function (a, b) { return a.inicio < b.inicio ? -1 : 1; });
+  const vienen = eventos.filter(function (x) { return t(x.inicio) > ahora && t(x.inicio) <= en14 && x.tipo !== 'nota'; })
+    .sort(function (a, b) { return a.inicio < b.inicio ? -1 : 1; });
+  const pendientes = eventos.filter(function (x) { return x.siguientePaso && !x.pasoHecho; });
+  const idsSemana = {};
+  pasaron.forEach(function (x) { idsSemana[x.id] = true; });
+
+  USUARIOS.forEach(function (fila) {
+    const nombre = fila[0], admin = fila[1] === true;
+    const correo = (CORREOS[nombre] || '').trim();
+    if (!correo || fila[1] === 'mama') return;
+    if (!pasaron.length && !vienen.length && !pendientes.length && !mensajes.length) return;
+
+    let h = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1d2b33;max-width:600px">';
+    h += '<h2 style="color:#2f6f6a;margin:0 0 4px">Resumen de la semana</h2><p style="color:#5b6b72;margin:0 0 16px">Hola, ' + esc(nombre) + '. Esto pasó con Marisol en los últimos 7 días.</p>';
+
+    h += '<h3 style="margin:16px 0 6px">Lo que pasó</h3>';
+    h += pasaron.length ? '<ul style="padding-left:18px;margin:0">' + pasaron.map(function (x) {
+      let l = '<li style="margin-bottom:8px"><b>' + esc(tipos[x.tipo] || x.tipo) + ': ' + esc(x.titulo) + '</b> — ' + esc(cuando(x.inicio));
+      if (x.novedades) l += '<br>' + esc(x.novedades);
+      if (x.sintomas) {
+        try {
+          const sx = JSON.parse(x.sintomas), partes = [];
+          ['nauseas', 'cansancio', 'dolor'].forEach(function (k) {
+            if (sx[k] !== undefined && sx[k] !== '') partes.push({ nauseas: 'Náuseas', cansancio: 'Cansancio', dolor: 'Dolor' }[k] + ' ' + sx[k] + '/5');
+          });
+          if (sx.otra) partes.push(sx.otra);
+          if (partes.length) l += '<br><span style="color:#5b6b72">Cómo se sintió: ' + esc(partes.join(', ')) + '</span>';
+        } catch (z) {}
+      }
+      return l + '</li>';
+    }).join('') + '</ul>' : '<p style="margin:0;color:#5b6b72">No hubo sesiones esta semana.</p>';
+
+    h += '<h3 style="margin:16px 0 6px">Lo que viene (próximas 2 semanas)</h3>';
+    h += vienen.length ? '<ul style="padding-left:18px;margin:0">' + vienen.map(function (x) {
+      const ac = x.acompanan ? x.acompanan.split('|').join(', ') : '';
+      return '<li style="margin-bottom:8px"><b>' + esc(x.titulo) + '</b> — ' + esc(cuando(x.inicio)) + ' (hora Ecuador)<br>' +
+        (ac ? 'La acompaña: ' + esc(ac) : '<span style="color:#b5652b"><b>Nadie se ha anotado para acompañarla.</b></span>') + '</li>';
+    }).join('') + '</ul>' : '<p style="margin:0;color:#5b6b72">No hay nada agendado.</p>';
+
+    if (pendientes.length) {
+      h += '<h3 style="margin:16px 0 6px">Pendientes</h3><ul style="padding-left:18px;margin:0">' +
+        pendientes.map(function (x) { return '<li>' + esc(x.siguientePaso) + ' <span style="color:#5b6b72">(de «' + esc(x.titulo) + '»)</span></li>'; }).join('') + '</ul>';
+    }
+
+    const misPagos = pagos.filter(function (x) { return idsSemana[x.eventoId] && (admin || x.quienPago === nombre); });
+    if (misPagos.length) {
+      const total = misPagos.reduce(function (a, x) { return a + (Number(x.monto) || 0); }, 0);
+      h += '<h3 style="margin:16px 0 6px">' + (admin ? 'Pagado esta semana' : 'Tu aporte esta semana') + '</h3><p style="margin:0"><b>' + dinero(total) + '</b>' +
+        (admin ? ' en ' + misPagos.length + (misPagos.length === 1 ? ' pago' : ' pagos') : '') + '</p>';
+    }
+
+    if (mensajes.length) {
+      h += '<p style="margin:16px 0 0">💬 Esta semana la familia le dejó ' + mensajes.length + (mensajes.length === 1 ? ' mensaje' : ' mensajes') + ' a Marisol.</p>';
+    }
+
+    h += '<p style="margin:24px 0 0"><a href="' + DIRECCION_APP + '" style="color:#2f6f6a;font-weight:bold">Abrir el Cuaderno familia</a> (usa tu propio enlace)</p></div>';
+
+    MailApp.sendEmail({ to: correo, subject: 'Resumen de la semana — Cuaderno familia', htmlBody: h });
+  });
 }
