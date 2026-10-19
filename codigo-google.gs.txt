@@ -636,7 +636,7 @@ function resumenSemanal() {
   const esMama = {};
   USUARIOS.forEach(function (x) { if (x[1] === 'mama') esMama[x[0]] = true; });
   const mensajes = tabla('Mensajes').filas.filter(function (m) { return new Date(m.fecha).getTime() > hace7 && !esMama[m.quien] && !m.para; });
-  const tipos = { inmuno: 'Inmunoterapia', quimio: 'Suero', cita: 'Cita médica', examen: 'Examen', nota: 'Nota' };
+  const tipos = { inmuno: 'Inmunoterapia', quimio: 'Suero', inyeccion: 'Inyección', cita: 'Cita médica', examen: 'Examen', nota: 'Nota' };
   const esc = function (t) { return String(t || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
